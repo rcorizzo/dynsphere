@@ -423,8 +423,8 @@ class MultiSphereDeepSVDDDetector:
         return np.concatenate(scores)
 
 
-class HybridPendulumSequenceDetector:
-    """Hybrid of interpretable pendulum dynamics and sequence reconstruction.
+class DynSphereAEDetector:
+    """DynSphereAE: robust fusion of DynSphere and sequence reconstruction.
 
     Both components are trained only on normal trajectories. Their training
     scores are robustly normalized before being combined, so the weight is not
@@ -441,7 +441,7 @@ class HybridPendulumSequenceDetector:
         self.pendulum_weight = pendulum_weight
         self.random_state = random_state
 
-    def fit(self, x: np.ndarray, entity_ids: np.ndarray, times: np.ndarray | None = None) -> "HybridPendulumSequenceDetector":
+    def fit(self, x: np.ndarray, entity_ids: np.ndarray, times: np.ndarray | None = None) -> "DynSphereAEDetector":
         self.sequence_ae_ = SequenceAutoencoderDetector(random_state=self.random_state)
         self.sequence_ae_.fit(x, entity_ids)
         ae_train = self.sequence_ae_.decision_function(x, entity_ids)
@@ -462,12 +462,12 @@ class HybridPendulumSequenceDetector:
         )
 
 
-class EnhancedPendulumEnsembleDetector:
-    """Score-level ensemble of pendulum dynamics, windows, and static detectors.
+class DynSpherePlusPlusDetector:
+    """DynSphere++: score-level ensemble of DynSphere, windows, and detectors.
 
-    The full TSB-AD-M run showed that static marginal detectors can dominate
-    aggregate performance, while pendulum helps on some dynamic subgroups. This
-    variant makes that complementarity explicit via robust score fusion.
+    The real-world benchmark runs show that different detector families can
+    dominate different source families. This variant makes that complementarity
+    explicit via robust score fusion.
     """
 
     def __init__(
@@ -484,7 +484,7 @@ class EnhancedPendulumEnsembleDetector:
         self.static_weight = static_weight
         self.random_state = random_state
 
-    def fit(self, x: np.ndarray, entity_ids: np.ndarray, times: np.ndarray | None = None) -> "EnhancedPendulumEnsembleDetector":
+    def fit(self, x: np.ndarray, entity_ids: np.ndarray, times: np.ndarray | None = None) -> "DynSpherePlusPlusDetector":
         del times
         self.components_: list[tuple[float, object, str, float, float]] = []
 

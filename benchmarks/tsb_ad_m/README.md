@@ -1,6 +1,6 @@
 # TSB-AD-M Validation
 
-This folder keeps real multivariate time-series validation separate from the synthetic pendulum benchmark.
+This folder keeps real multivariate time-series validation separate from the synthetic DynSphere benchmark.
 
 TSB-AD-M is the multivariate split of TSB-AD. The official TSB-AD README describes the CSV format as feature columns followed by a `Label` column, where labels are used for evaluation and the preceding columns are the time-series variables.
 
@@ -16,16 +16,18 @@ The data are not committed to this workspace.
 
 ## Run
 
-Evaluate a small smoke subset:
+Evaluate a small smoke subset. Preferred CLI method names are `dynsphere`,
+`dynsphere_ae`, and `dynsphere_pp`; legacy aliases remain accepted for
+compatibility with older result scripts.
 
 ```bash
-python3 benchmarks/tsb_ad_m/run_tsb_ad_m.py --limit 5 --methods pendulum sequence_ae pendulum_seqae
+python3 benchmarks/tsb_ad_m/run_tsb_ad_m.py --limit 5 --methods dynsphere sequence_ae dynsphere_ae
 ```
 
 Run more files:
 
 ```bash
-python3 benchmarks/tsb_ad_m/run_tsb_ad_m.py --limit 50 --fit-mode all --methods pendulum sequence_ae pendulum_seqae
+python3 benchmarks/tsb_ad_m/run_tsb_ad_m.py --limit 50 --fit-mode all --methods dynsphere sequence_ae dynsphere_ae
 ```
 
 Outputs are written to:
@@ -41,10 +43,10 @@ Outputs are written to:
 
 ## Methods
 
-- `pendulum`: `MultiConceptPendulumDetector`
+- `dynsphere`: DynSphere detector
 - `sequence_ae`: windowed sequence autoencoder
-- `pendulum_seqae`: robust fusion of sequence autoencoder and pendulum detector
-- `hybrid`: backward-compatible alias for `pendulum_seqae`
+- `dynsphere_ae`: DynSphereAE, robust fusion of sequence autoencoder and DynSphere
+- `dynsphere_pp`: DynSphere++ score-level ensemble
 - PyOD baselines: `lof`, `knn`, `iforest`, `hbos`, `copod`, `pca`
 
 This runner reports AUROC and AUPRC. Official TSB-AD studies emphasize VUS-style metrics as well; this folder is a lightweight integration layer, not a replacement for the official benchmark harness.
@@ -56,7 +58,7 @@ uv run --with numpy --with pandas --with scikit-learn --with pyod --with torch -
   python benchmarks/tsb_ad_m/run_tsb_ad_m.py \
   --limit 5 \
   --fit-mode all \
-  --methods pendulum sequence_ae pendulum_seqae hbos copod \
+  --methods dynsphere sequence_ae dynsphere_ae hbos copod \
   --include-vus \
   --out-dir benchmarks/tsb_ad_m/results_limit5_all_vus
 ```

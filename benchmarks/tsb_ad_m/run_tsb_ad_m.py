@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run pendulum and baseline detectors on TSB-AD-M CSV files."""
+"""Run DynSphere and baseline detectors on TSB-AD-M CSV files."""
 
 from __future__ import annotations
 
@@ -26,6 +26,10 @@ from pendulum_detector import MultiConceptPendulumDetector  # noqa: E402
 
 PYOD_METHODS = {"lof", "knn", "iforest", "hbos", "copod", "pca"}
 ENHANCED_ABLATIONS = {
+    "dynsphere_pp_no_dynsphere": {"pendulum_weight": 0.0},
+    "dynsphere_pp_no_sequence": {"sequence_weight": 0.0},
+    "dynsphere_pp_no_window": {"window_knn_weight": 0.0},
+    "dynsphere_pp_no_classical": {"static_weight": 0.0},
     "enhanced_no_pendulum": {"pendulum_weight": 0.0},
     "enhanced_no_sequence": {"sequence_weight": 0.0},
     "enhanced_no_window": {"window_knn_weight": 0.0},
@@ -35,6 +39,8 @@ NEURAL_METHODS = {
     "static_ae",
     "deep_svdd_kmeans",
     "sequence_ae",
+    "dynsphere_ae",
+    "dynsphere_pp",
     "hybrid",
     "pendulum_seqae",
     "window_knn",
@@ -43,21 +49,28 @@ NEURAL_METHODS = {
     *ENHANCED_ABLATIONS,
 }
 PENDULUM_ABLATIONS = {
+    "dynsphere_no_transition": {"transition_weight": 0.0},
+    "dynsphere_no_energy": {"energy_weight": 0.0},
+    "dynsphere_no_raw": {"raw_dynamic_weight": 0.0},
+    "dynsphere_no_concepts": {"n_concepts": 1, "transition_weight": 0.0},
     "pendulum_no_transition": {"transition_weight": 0.0},
     "pendulum_no_energy": {"energy_weight": 0.0},
     "pendulum_no_raw": {"raw_dynamic_weight": 0.0},
     "pendulum_no_concepts": {"n_concepts": 1, "transition_weight": 0.0},
 }
 ALL_METHODS = [
+    "dynsphere",
     "pendulum",
     *sorted(PENDULUM_ABLATIONS),
     "static_ae",
     "deep_svdd_kmeans",
     "sequence_ae",
+    "dynsphere_ae",
     "pendulum_seqae",
     "hybrid",
     "window_knn",
     "forecast_mlp",
+    "dynsphere_pp",
     "enhanced_pendulum",
     *sorted(ENHANCED_ABLATIONS),
     "lof",
@@ -67,6 +80,38 @@ ALL_METHODS = [
     "copod",
     "pca",
 ]
+METHOD_DISPLAY_NAMES = {
+    "dynsphere": "DynSphere",
+    "pendulum": "DynSphere",
+    "dynsphere_no_transition": "DynSphere-NoTransition",
+    "dynsphere_no_energy": "DynSphere-NoEnergy",
+    "dynsphere_no_raw": "DynSphere-NoRawDynamics",
+    "dynsphere_no_concepts": "DynSphere-NoConcepts",
+    "pendulum_no_transition": "DynSphere-NoTransition",
+    "pendulum_no_energy": "DynSphere-NoEnergy",
+    "pendulum_no_raw": "DynSphere-NoRawDynamics",
+    "pendulum_no_concepts": "DynSphere-NoConcepts",
+    "dynsphere_ae": "DynSphereAE",
+    "pendulum_seqae": "DynSphereAE",
+    "hybrid": "DynSphereAE",
+    "dynsphere_pp": "DynSphere++",
+    "enhanced_pendulum": "DynSphere++",
+    "dynsphere_pp_no_dynsphere": "DynSphere++ w/o DynSphere",
+    "dynsphere_pp_no_sequence": "DynSphere++ w/o sequence",
+    "dynsphere_pp_no_window": "DynSphere++ w/o window",
+    "dynsphere_pp_no_classical": "DynSphere++ w/o classical",
+    "enhanced_no_pendulum": "DynSphere++ w/o DynSphere",
+    "enhanced_no_sequence": "DynSphere++ w/o sequence",
+    "enhanced_no_window": "DynSphere++ w/o window",
+    "enhanced_no_static": "DynSphere++ w/o classical",
+    "static_ae": "AutoEncoder",
+    "deep_svdd_kmeans": "DeepSVDD-KMeans",
+    "forecast_mlp": "PMLP",
+}
+
+
+def display_method(method: str) -> str:
+    return METHOD_DISPLAY_NAMES.get(method, method)
 
 
 def discover_csvs(data_dir: Path) -> list[Path]:
@@ -237,7 +282,7 @@ def score_pyod(method: str, x_train: np.ndarray, x_all: np.ndarray, random_state
     return np.asarray(model.decision_function(all_scaled), dtype=float)
 
 
-def score_pendulum(
+def score_dynsphere(
     x_train: np.ndarray,
     x_all: np.ndarray,
     train_idx: np.ndarray,
@@ -279,10 +324,10 @@ def score_deep_svdd_kmeans(x_train: np.ndarray, x_all: np.ndarray, random_state:
     return model.decision_function(x_all)
 
 
-def score_hybrid(x_train: np.ndarray, x_all: np.ndarray, train_idx: np.ndarray, random_state: int) -> np.ndarray:
-    from neural_baselines import HybridPendulumSequenceDetector
+def score_dynsphere_ae(x_train: np.ndarray, x_all: np.ndarray, train_idx: np.ndarray, random_state: int) -> np.ndarray:
+    from neural_baselines import DynSphereAEDetector
 
-    model = HybridPendulumSequenceDetector(random_state=random_state)
+    model = DynSphereAEDetector(random_state=random_state)
     model.fit(x_train, np.zeros(len(x_train), dtype=int), train_idx)
     return model.decision_function(x_all, np.zeros(len(x_all), dtype=int), np.arange(len(x_all)))
 
@@ -304,25 +349,25 @@ def score_forecast_mlp(x_train: np.ndarray, x_all: np.ndarray, random_state: int
     return model.decision_function(x_all, np.zeros(len(x_all), dtype=int))
 
 
-def score_enhanced_pendulum(
+def score_dynsphere_pp(
     x_train: np.ndarray,
     x_all: np.ndarray,
     train_idx: np.ndarray,
     random_state: int,
     **kwargs,
 ) -> np.ndarray:
-    from neural_baselines import EnhancedPendulumEnsembleDetector
+    from neural_baselines import DynSpherePlusPlusDetector
 
-    model = EnhancedPendulumEnsembleDetector(random_state=random_state, **kwargs)
+    model = DynSpherePlusPlusDetector(random_state=random_state, **kwargs)
     model.fit(x_train, np.zeros(len(x_train), dtype=int), train_idx)
     return model.decision_function(x_all, np.zeros(len(x_all), dtype=int), np.arange(len(x_all)))
 
 
 def method_scorer(method: str) -> Callable[[np.ndarray, np.ndarray, np.ndarray, int], np.ndarray]:
-    if method == "pendulum":
-        return score_pendulum
+    if method in {"dynsphere", "pendulum"}:
+        return score_dynsphere
     if method in PENDULUM_ABLATIONS:
-        return lambda x_train, x_all, train_idx, random_state: score_pendulum(
+        return lambda x_train, x_all, train_idx, random_state: score_dynsphere(
             x_train, x_all, train_idx, random_state, **PENDULUM_ABLATIONS[method]
         )
     if method == "static_ae":
@@ -331,16 +376,16 @@ def method_scorer(method: str) -> Callable[[np.ndarray, np.ndarray, np.ndarray, 
         return lambda x_train, x_all, train_idx, random_state: score_deep_svdd_kmeans(x_train, x_all, random_state)
     if method == "sequence_ae":
         return lambda x_train, x_all, train_idx, random_state: score_sequence_ae(x_train, x_all, random_state)
-    if method in {"hybrid", "pendulum_seqae"}:
-        return score_hybrid
+    if method in {"dynsphere_ae", "hybrid", "pendulum_seqae"}:
+        return score_dynsphere_ae
     if method == "window_knn":
         return lambda x_train, x_all, train_idx, random_state: score_window_knn(x_train, x_all, random_state)
     if method == "forecast_mlp":
         return lambda x_train, x_all, train_idx, random_state: score_forecast_mlp(x_train, x_all, random_state)
-    if method == "enhanced_pendulum":
-        return score_enhanced_pendulum
+    if method in {"dynsphere_pp", "enhanced_pendulum"}:
+        return score_dynsphere_pp
     if method in ENHANCED_ABLATIONS:
-        return lambda x_train, x_all, train_idx, random_state: score_enhanced_pendulum(
+        return lambda x_train, x_all, train_idx, random_state: score_dynsphere_pp(
             x_train, x_all, train_idx, random_state, **ENHANCED_ABLATIONS[method]
         )
     if method in PYOD_METHODS:
@@ -404,7 +449,8 @@ def completed_keys(rows: list[dict[str, object]]) -> set[tuple[str, str, str]]:
     keys = set()
     for row in rows:
         if row.get("status") in {"ok", "failed", "load_failed", "skipped"}:
-            keys.add((str(row.get("file")), str(row.get("method")), str(row.get("fit_mode"))))
+            method_id = row.get("method_id", row.get("method"))
+            keys.add((str(row.get("file")), str(method_id), str(row.get("fit_mode"))))
     return keys
 
 
@@ -413,7 +459,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", default=base_dir / "data" / "TSB-AD-M")
     parser.add_argument("--out-dir", default=base_dir / "results")
-    parser.add_argument("--methods", nargs="+", default=["pendulum", "sequence_ae", "hybrid"])
+    parser.add_argument("--methods", nargs="+", default=["dynsphere", "sequence_ae", "dynsphere_ae"])
     parser.add_argument("--fit-mode", choices=["all", "prefix", "oracle-clean"], default="all")
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--min-train", type=int, default=64)
@@ -535,7 +581,8 @@ def main() -> None:
                         {
                             "file": str(csv_path),
                             "dataset": csv_path.stem,
-                            "method": method,
+                            "method": display_method(method),
+                            "method_id": method,
                             "fit_mode": args.fit_mode,
                             "status": "skipped",
                             "n": int(len(labels)),
@@ -559,7 +606,15 @@ def main() -> None:
             idx = train_indices(labels, args.fit_mode, args.min_train)
         except Exception as exc:
             for method in methods:
-                rows.append({"file": str(csv_path), "method": method, "status": "load_failed", "error": str(exc)})
+                rows.append(
+                    {
+                        "file": str(csv_path),
+                        "method": display_method(method),
+                        "method_id": method,
+                        "status": "load_failed",
+                        "error": str(exc),
+                    }
+                )
             write_outputs(rows, out_dir, data_dir, args.fit_mode, methods, args.limit)
             continue
 
@@ -577,7 +632,8 @@ def main() -> None:
                     {
                         "file": str(csv_path),
                         "dataset": csv_path.stem,
-                        "method": method,
+                        "method": display_method(method),
+                        "method_id": method,
                         "fit_mode": args.fit_mode,
                         "status": "ok",
                         "n_features": int(x_all.shape[1]),
@@ -598,7 +654,8 @@ def main() -> None:
                     {
                         "file": str(csv_path),
                         "dataset": csv_path.stem,
-                        "method": method,
+                        "method": display_method(method),
+                        "method_id": method,
                         "fit_mode": args.fit_mode,
                         "status": "failed",
                         "error": str(exc),

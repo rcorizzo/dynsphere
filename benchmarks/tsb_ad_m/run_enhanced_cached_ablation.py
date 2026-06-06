@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cached component ablation for EnhancedPendulum on TSB-AD-M source families."""
+"""Cached component ablation for DynSphere++ on TSB-AD-M source families."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ DEFAULT_WEIGHTS = {
 }
 
 VARIANTS = {
-    "EnhancedPendulum": ("pendulum", "sequence", "window", "static"),
+    "DynSphere++": ("pendulum", "sequence", "window", "static"),
     "w/o pendulum": ("sequence", "window", "static"),
     "w/o sequence": ("pendulum", "window", "static"),
     "w/o window": ("pendulum", "sequence", "static"),
@@ -55,7 +55,7 @@ VARIANTS = {
 }
 
 SEQUENCE_FREE_VARIANTS = {
-    "EnhancedPendulum": ("pendulum", "window", "static"),
+    "DynSphere++": ("pendulum", "window", "static"),
     "w/o pendulum": ("window", "static"),
     "w/o window": ("pendulum", "static"),
     "w/o static": ("pendulum", "window"),

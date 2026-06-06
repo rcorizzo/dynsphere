@@ -149,9 +149,9 @@ def run_neural_baselines(
     vus_window: int | None = None,
 ) -> dict[str, dict[str, dict[str, float | int | None]]]:
     from neural_baselines import (
-        EnhancedPendulumEnsembleDetector,
+        DynSphereAEDetector,
+        DynSpherePlusPlusDetector,
         ForecastingMLPDetector,
-        HybridPendulumSequenceDetector,
         MultiSphereDeepSVDDDetector,
         SequenceAutoencoderDetector,
         StaticAutoencoderDetector,
@@ -169,8 +169,8 @@ def run_neural_baselines(
         ("ForecastMLP", ForecastingMLPDetector(random_state=random_state)),
         ("DeepSVDD-KMeans", MultiSphereDeepSVDDDetector(random_state=random_state)),
         ("DeepSVDD-OracleRegime", MultiSphereDeepSVDDDetector(random_state=random_state)),
-        ("PendulumSeqAE", HybridPendulumSequenceDetector(random_state=random_state)),
-        ("EnhancedPendulum", EnhancedPendulumEnsembleDetector(random_state=random_state)),
+        ("DynSphereAE", DynSphereAEDetector(random_state=random_state)),
+        ("DynSphere++", DynSpherePlusPlusDetector(random_state=random_state)),
     ]
 
     for name, model in neural_jobs:
@@ -179,7 +179,7 @@ def run_neural_baselines(
         if name in {"SequenceAE", "WindowKNN", "ForecastMLP"}:
             model.fit(x_train, train["entity_id"].to_numpy())
             scores = model.decision_function(x_test, test["entity_id"].to_numpy())
-        elif name in {"PendulumSeqAE", "EnhancedPendulum"}:
+        elif name in {"DynSphereAE", "DynSphere++"}:
             model.fit(x_train, train["entity_id"].to_numpy(), train["time"].to_numpy())
             scores = model.decision_function(x_test, test["entity_id"].to_numpy(), test["time"].to_numpy())
         elif name == "DeepSVDD-OracleRegime":
@@ -248,25 +248,25 @@ def main() -> None:
             )
         )
 
-    print("Running MultiConceptPendulum...", flush=True)
+    print("Running DynSphere...", flush=True)
     start = time.perf_counter()
     pendulum = MultiConceptPendulumDetector(
         n_concepts=4,
         latent_dim=5,
         random_state=args.random_state,
     )
-    # The pendulum method needs complete sequences, so train on all normal rows.
+    # DynSphere needs complete sequences, so train on all normal rows.
     x_train_full = train[feature_cols].to_numpy()
     pendulum.fit(x_train_full, train["entity_id"].to_numpy(), train["time"].to_numpy())
     pendulum_scores = pendulum.decision_function(x_test, test["entity_id"].to_numpy(), test["time"].to_numpy())
-    timings["MultiConceptPendulum"] = time.perf_counter() - start
-    results["MultiConceptPendulum"] = evaluate_by_type(test, pendulum_scores, args.include_vus, args.vus_window)
+    timings["DynSphere"] = time.perf_counter() - start
+    results["DynSphere"] = evaluate_by_type(test, pendulum_scores, args.include_vus, args.vus_window)
 
     ablations = {
-        "Pendulum-NoTransition": {"transition_weight": 0.0},
-        "Pendulum-NoEnergy": {"energy_weight": 0.0},
-        "Pendulum-NoRawDynamics": {"raw_dynamic_weight": 0.0},
-        "Pendulum-NoConcepts": {"n_concepts": 1, "transition_weight": 0.0},
+        "DynSphere-NoTransition": {"transition_weight": 0.0},
+        "DynSphere-NoEnergy": {"energy_weight": 0.0},
+        "DynSphere-NoRawDynamics": {"raw_dynamic_weight": 0.0},
+        "DynSphere-NoConcepts": {"n_concepts": 1, "transition_weight": 0.0},
     }
     for name, kwargs in ablations.items():
         print(f"Running {name}...", flush=True)

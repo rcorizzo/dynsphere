@@ -26,11 +26,12 @@ for path in (REPO_ROOT, TSB_DIR):
 from run_tsb_ad_m import (  # noqa: E402
     ENHANCED_ABLATIONS,
     PENDULUM_ABLATIONS,
+    display_method,
     score_deep_svdd_kmeans,
+    score_dynsphere,
+    score_dynsphere_ae,
+    score_dynsphere_pp,
     score_forecast_mlp,
-    score_enhanced_pendulum,
-    score_hybrid,
-    score_pendulum,
     score_pyod,
     score_sequence_ae,
     score_static_ae,
@@ -39,16 +40,18 @@ from run_tsb_ad_m import (  # noqa: E402
 
 
 METHODS = {
-    "pendulum": score_pendulum,
+    "dynsphere": score_dynsphere,
+    "pendulum": score_dynsphere,
     **{
-        name: (lambda kwargs: lambda x_train, x_all, train_idx, random_state: score_pendulum(
+        name: (lambda kwargs: lambda x_train, x_all, train_idx, random_state: score_dynsphere(
             x_train, x_all, train_idx, random_state, **kwargs
         ))(kwargs)
         for name, kwargs in PENDULUM_ABLATIONS.items()
     },
-    "enhanced_pendulum": score_enhanced_pendulum,
+    "dynsphere_pp": score_dynsphere_pp,
+    "enhanced_pendulum": score_dynsphere_pp,
     **{
-        name: (lambda kwargs: lambda x_train, x_all, train_idx, random_state: score_enhanced_pendulum(
+        name: (lambda kwargs: lambda x_train, x_all, train_idx, random_state: score_dynsphere_pp(
             x_train, x_all, train_idx, random_state, **kwargs
         ))(kwargs)
         for name, kwargs in ENHANCED_ABLATIONS.items()
@@ -62,8 +65,9 @@ METHODS = {
     "deep_svdd_kmeans": lambda x_train, x_all, train_idx, random_state: score_deep_svdd_kmeans(
         x_train, x_all, random_state
     ),
-    "pendulum_seqae": score_hybrid,
-    "hybrid": score_hybrid,
+    "dynsphere_ae": score_dynsphere_ae,
+    "pendulum_seqae": score_dynsphere_ae,
+    "hybrid": score_dynsphere_ae,
     "window_knn": lambda x_train, x_all, train_idx, random_state: score_window_knn(
         x_train, x_all, random_state
     ),
@@ -195,7 +199,7 @@ def main() -> None:
     parser.add_argument("--test-label", default=None)
     parser.add_argument("--max-train-rows", type=int, default=20000)
     parser.add_argument("--max-test-rows", type=int, default=30000)
-    parser.add_argument("--methods", nargs="+", default=["pendulum", "enhanced_pendulum", "iforest", "hbos", "copod"])
+    parser.add_argument("--methods", nargs="+", default=["dynsphere", "dynsphere_pp", "iforest", "hbos", "copod"])
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--random-state", type=int, default=37)
     parser.add_argument("--include-vus", action="store_true")
@@ -229,7 +233,8 @@ def main() -> None:
             scores = METHODS[method](x_train, x_test, np.arange(len(x_train)), args.random_state)
             row = {
                 "dataset": args.dataset,
-                "method": method,
+                "method": display_method(method),
+                "method_id": method,
                 "status": "ok",
                 "train_rows": int(len(x_train)),
                 "test_rows": int(len(x_test)),
@@ -242,7 +247,8 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001
             row = {
                 "dataset": args.dataset,
-                "method": method,
+                "method": display_method(method),
+                "method_id": method,
                 "status": "failed",
                 "seconds": float(time.time() - started),
                 "error": str(exc),

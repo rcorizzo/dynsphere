@@ -7,8 +7,8 @@ trajectory dynamics rather than by pointwise feature rarity alone.
 
 ## Repository Structure
 
-- `pendulum_detector.py`: standalone multi-concept pendulum detector.
-- `neural_baselines.py`: autoencoder, window-kNN, forecasting MLP, DeepSVDD, PendulumSeqAE, and EnhancedPendulum implementations.
+- `pendulum_detector.py`: standalone DynSphere detector.
+- `neural_baselines.py`: autoencoder, window-kNN, forecasting MLP, DeepSVDD, DynSphereAE, and DynSphere++ implementations.
 - `range_metrics.py`: AUROC/AUPRC helpers and VUS wrapper/fallback logic.
 - `generate_pendulum_dataset.py`: synthetic benchmark generator.
 - `run_benchmarks.py`: synthetic benchmark runner.
@@ -75,7 +75,7 @@ python3 generate_pendulum_dataset.py \
   --anomaly-profile contextual
 ```
 
-Run the contextual benchmark with neural and pendulum-family methods:
+Run the contextual benchmark with neural and DynSphere-family methods:
 
 ```bash
 python3 run_benchmarks.py \
@@ -83,7 +83,7 @@ python3 run_benchmarks.py \
   --test data/contextual/pendulum_contextual_test.csv \
   --include-neural \
   --include-vus \
-  --out results/contextual_updated_pendulum_seqae_results.json
+  --out results/contextual_dynsphere_results.json
 ```
 
 Run the contextual PyOD/static baselines with VUS:
@@ -105,18 +105,22 @@ Current contextual-only Table I values:
 | COPOD | 0.5022 | 0.5673 |
 | LOF | 0.4978 | 0.5812 |
 | kNN | 0.4981 | 0.5779 |
-| Predictive MLP | 0.5962 | 0.7055 |
+| PMLP | 0.5962 | 0.7055 |
 | Window-kNN | 0.7068 | 0.7855 |
 | AutoEncoder | 0.5261 | 0.6058 |
 | DeepSVDD | 0.5052 | 0.5855 |
-| Pendulum | 0.6725 | 0.7024 |
-| PendulumSeqAE | 0.7810 | 0.8421 |
-| EnhancedPendulum | 0.7680 | 0.8360 |
+| DynSphere | 0.6725 | 0.7024 |
+| DynSphereAE | 0.7810 | 0.8421 |
+| DynSphere++ | 0.7680 | 0.8360 |
 
-## Public Source-Family Experiments
+## Real-World Benchmarks
 
 The paper reports complete-source TSB-AD-M runs for MSL, SMAP, and SMD, plus
 real-world datasets BATADAL, HAI-20.07, and PowerSystem.
+
+Preferred CLI method names match the paper variants: `dynsphere`,
+`dynsphere_ae`, and `dynsphere_pp`. Legacy aliases remain accepted for
+compatibility with older result scripts.
 
 Download TSB-AD-M. The archive is written under `benchmarks/tsb_ad_m/data/`,
 which is ignored by git:
@@ -154,7 +158,7 @@ Run the main complete-source methods on MSL, SMAP, and SMD:
 
 ```bash
 python3 benchmarks/tsb_ad_m/run_tsb_ad_m.py \
-  --methods iforest hbos copod lof knn forecast_mlp window_knn pendulum pendulum_seqae enhanced_pendulum \
+  --methods iforest hbos copod lof knn forecast_mlp window_knn dynsphere dynsphere_ae dynsphere_pp \
   --include-sources MSL SMAP SMD \
   --limit 0 \
   --fit-mode all \
@@ -174,26 +178,6 @@ python3 benchmarks/tsb_ad_m/run_tsb_ad_m.py \
   --out-dir benchmarks/tsb_ad_m/results_static_ae_table2_official_vus
 ```
 
-Run DeepSVDD with the lower-epoch configuration used in the paper:
-
-```bash
-python3 benchmarks/tsb_ad_m/run_tsb_ad_m.py \
-  --methods deep_svdd_kmeans \
-  --include-sources MSL \
-  --limit 0 \
-  --fit-mode all \
-  --include-vus \
-  --out-dir benchmarks/tsb_ad_m/results_deep_svdd_kmeans_msl_official_vus
-
-python3 benchmarks/tsb_ad_m/run_tsb_ad_m.py \
-  --methods deep_svdd_kmeans \
-  --include-sources SMAP SMD \
-  --limit 0 \
-  --fit-mode all \
-  --include-vus \
-  --out-dir benchmarks/tsb_ad_m/results_deep_svdd_kmeans_smap_smd_official_vus
-```
-
 Run the real-world datasets. The real-world dataset runner processes
 one dataset per command:
 
@@ -206,7 +190,7 @@ python3 benchmarks/real_world_datasets/run_real_world_datasets.py \
   --test-label ATT_FLAG \
   --max-train-rows 20000 \
   --max-test-rows 30000 \
-  --methods pendulum enhanced_pendulum pendulum_seqae forecast_mlp window_knn static_ae deep_svdd_kmeans iforest hbos copod lof knn \
+  --methods dynsphere dynsphere_pp dynsphere_ae forecast_mlp window_knn static_ae deep_svdd_kmeans iforest hbos copod lof knn \
   --include-vus \
   --out benchmarks/real_world_datasets/results/batadal_full_vus.csv
 
@@ -218,7 +202,7 @@ python3 benchmarks/real_world_datasets/run_real_world_datasets.py \
   --test-label attack \
   --max-train-rows 20000 \
   --max-test-rows 30000 \
-  --methods pendulum enhanced_pendulum pendulum_seqae forecast_mlp window_knn static_ae deep_svdd_kmeans iforest hbos copod lof knn \
+  --methods dynsphere dynsphere_pp dynsphere_ae forecast_mlp window_knn static_ae deep_svdd_kmeans iforest hbos copod lof knn \
   --include-vus \
   --out benchmarks/real_world_datasets/results/hai_20_07_full_vus.csv
 
@@ -230,7 +214,7 @@ python3 benchmarks/real_world_datasets/run_real_world_datasets.py \
   --test-label marker \
   --max-train-rows 20000 \
   --max-test-rows 30000 \
-  --methods pendulum enhanced_pendulum pendulum_seqae forecast_mlp window_knn static_ae deep_svdd_kmeans iforest hbos copod lof knn \
+  --methods dynsphere dynsphere_pp dynsphere_ae forecast_mlp window_knn static_ae deep_svdd_kmeans iforest hbos copod lof knn \
   --include-vus \
   --out benchmarks/real_world_datasets/results/power_system_full_vus.csv
 ```
@@ -238,65 +222,3 @@ python3 benchmarks/real_world_datasets/run_real_world_datasets.py \
 The `--max-train-rows` and `--max-test-rows` arguments generate the subsampled
 versions used in the paper at run time. No derived third-party CSV needs to be
 committed.
-
-Current Table II interpretation:
-
-- DeepSVDD is strongest on MSL.
-- EnhancedPendulum is strongest on SMAP and SMD.
-- PendulumSeqAE is strongest on BATADAL.
-- Pendulum is strongest on HAI-20.07 and PowerSystem.
-- EnhancedPendulum has the best AUROC rank sum across the six public rows.
-
-## Figures and Paper
-
-Regenerate the contextual benchmark visualization:
-
-```bash
-python3 paper/make_contextual_visual.py
-```
-
-Compile the IEEE paper:
-
-```bash
-cd paper
-latexmk -pdf -interaction=nonstopmode main.tex
-```
-
-The compiled PDF is `paper/main.pdf`.
-
-## Files to Upload With the Repository
-
-Upload these files/directories:
-
-- `README.md`
-- `requirements.txt`
-- `pendulum_detector.py`
-- `neural_baselines.py`
-- `range_metrics.py`
-- `generate_pendulum_dataset.py`
-- `run_benchmarks.py`
-- `benchmarks/tsb_ad_m/*.py`
-- `benchmarks/real_world_datasets/*.py`
-- `data/contextual/pendulum_contextual_train.csv`
-- `data/contextual/pendulum_contextual_test.csv`
-- `data/contextual/pendulum_contextual_metadata.json`
-
-Do not upload generated caches, local build products, result folders, or raw
-third-party data:
-
-- `__pycache__/`
-- `.pytest_cache/`
-- `results/`
-- `benchmarks/**/results*/`
-- `benchmarks/**/analysis*/`
-- `benchmarks/tsb_ad_m/data/`
-- `benchmarks/real_world_datasets/data/`
-- `benchmarks/dynamics_stress/`
-- `benchmarks/skab/`
-- `data/ensemble_stress/`
-- `data/heterogeneous/`
-- raw third-party archives such as `TSB-AD-M.zip`, PowerSystem archives, SKAB
-  archives, or MHEALTH archives
-
-For third-party datasets, use the README download commands and the runner's
-subsampling arguments rather than redistributing raw or derived data files.
