@@ -82,7 +82,7 @@ python3 run_benchmarks.py \
   --out results/contextual_dynsphere_results.json
 ```
 
-Run the contextual PyOD/static baselines with VUS:
+Run the contextual PyOD baselines with VUS:
 
 ```bash
 python3 run_benchmarks.py \
@@ -114,9 +114,8 @@ Current contextual-only Table I values:
 The paper reports complete-source TSB-AD-M runs for MSL, SMAP, and SMD, plus
 real-world datasets BATADAL, HAI-20.07, and PowerSystem.
 
-Preferred CLI method names match the paper variants: `dynsphere`,
-`dynsphere_ae`, and `dynsphere_pp`. Legacy aliases remain accepted for
-compatibility with older result scripts.
+To run DynSphere mehtod variants from CLI use: `dynsphere`,
+`dynsphere_ae`, and `dynsphere_pp`.
 
 Download TSB-AD-M. The archive is written under `benchmarks/tsb_ad_m/data/`,
 which is ignored by git:
