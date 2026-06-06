@@ -1,0 +1,68 @@
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python caches and environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*.orig
+
+# Generated experiment outputs
+results/
+**/results/
+**/results_*/
+**/analysis_*/
+
+# Large/raw third-party datasets and archives.
+# Keep download/preparation scripts in the repository; do not push raw data.
+benchmarks/tsb_ad_m/data/
+benchmarks/real_world_datasets/data/
+benchmarks/real_world_datasets/data/power_system/
+benchmarks/real_world_datasets/data/ton_iot/
+
+# Non-paper or stale benchmark components.
+benchmarks/dynamics_stress/
+benchmarks/skab/
+data/ensemble_stress/
+data/heterogeneous/
+data/pendulum_multiconcept_*.csv
+data/pendulum_multiconcept_*.json
+
+# Generated archives and compressed dataset payloads anywhere in the code repo.
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+*.bz2
+*.xz
+
+# Keep the generated contextual benchmark used in the paper.
+!data/contextual/
+!data/contextual/pendulum_contextual_train.csv
+!data/contextual/pendulum_contextual_test.csv
+!data/contextual/pendulum_contextual_metadata.json
+
+# Local helper scripts not intended for the public artifact.
+scripts/
