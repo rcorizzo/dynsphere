@@ -62,6 +62,10 @@ def metric_dict(
         return result
     result["auroc"] = float(roc_auc_score(y_true, scores))
     result["auprc"] = float(average_precision_score(y_true, scores))
+    from range_metrics import best_point_adjusted_f1, practical_range_metrics
+
+    result.update(best_point_adjusted_f1(y_true, scores))
+    result.update(practical_range_metrics(y_true, scores))
     if include_vus:
         from range_metrics import entity_macro_vus
 

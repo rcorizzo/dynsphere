@@ -49,6 +49,137 @@ def normalize_scores(scores: np.ndarray) -> np.ndarray:
     return (scores - lo) / (hi - lo)
 
 
+def _segments(labels: np.ndarray) -> list[tuple[int, int]]:
+    labels = np.asarray(labels).astype(int)
+    segments: list[tuple[int, int]] = []
+    start = None
+    for i, value in enumerate(labels):
+        if value == 1 and start is None:
+            start = i
+        elif value == 0 and start is not None:
+            segments.append((start, i))
+            start = None
+    if start is not None:
+        segments.append((start, len(labels)))
+    return segments
+
+
+def point_adjust_predictions(labels: np.ndarray, predictions: np.ndarray) -> np.ndarray:
+    """Apply the common point-adjustment rule to binary predictions.
+
+    If a detector fires at least once inside a labeled anomaly interval, the
+    whole interval is counted as detected. Predictions outside labeled anomaly
+    intervals remain unchanged and still contribute false positives.
+    """
+    labels = np.asarray(labels).astype(int)
+    adjusted = np.asarray(predictions).astype(int).copy()
+    for start, end in _segments(labels):
+        if adjusted[start:end].any():
+            adjusted[start:end] = 1
+    return adjusted
+
+
+def _binary_f1(labels: np.ndarray, predictions: np.ndarray) -> tuple[float, float, float]:
+    labels = np.asarray(labels).astype(int)
+    predictions = np.asarray(predictions).astype(int)
+    tp = float(np.sum((labels == 1) & (predictions == 1)))
+    fp = float(np.sum((labels == 0) & (predictions == 1)))
+    fn = float(np.sum((labels == 1) & (predictions == 0)))
+    precision = tp / (tp + fp) if tp + fp > 0 else 0.0
+    recall = tp / (tp + fn) if tp + fn > 0 else 0.0
+    f1 = 2.0 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
+    return f1, precision, recall
+
+
+def best_point_adjusted_f1(labels: np.ndarray, scores: np.ndarray, max_thresholds: int = 200) -> dict[str, float | None]:
+    """Return best point-adjusted F1 over score thresholds.
+
+    The threshold is selected with labeled evaluation data, so this metric is
+    suitable as a diagnostic appendix measure rather than a deployable operating
+    point unless a validation set is available.
+    """
+    labels = np.asarray(labels).astype(int)
+    scores = normalize_scores(scores)
+    if labels.sum() == 0 or labels.sum() == len(labels):
+        return {"pa_f1": None, "pa_precision": None, "pa_recall": None, "pa_threshold": None}
+
+    unique_scores = np.unique(scores)
+    if len(unique_scores) > max_thresholds:
+        thresholds = np.quantile(scores, np.linspace(0.0, 1.0, max_thresholds))
+        thresholds = np.unique(thresholds)
+    else:
+        thresholds = unique_scores
+
+    best = {"pa_f1": 0.0, "pa_precision": 0.0, "pa_recall": 0.0, "pa_threshold": float(thresholds[0])}
+    for threshold in thresholds:
+        predictions = (scores >= threshold).astype(int)
+        adjusted = point_adjust_predictions(labels, predictions)
+        f1, precision, recall = _binary_f1(labels, adjusted)
+        if f1 > float(best["pa_f1"]):
+            best = {
+                "pa_f1": float(f1),
+                "pa_precision": float(precision),
+                "pa_recall": float(recall),
+                "pa_threshold": float(threshold),
+            }
+    return best
+
+
+def _top_budget_predictions(scores: np.ndarray, fraction: float) -> np.ndarray:
+    scores = normalize_scores(scores)
+    k = max(1, int(np.ceil(len(scores) * fraction)))
+    idx = np.argpartition(scores, -k)[-k:]
+    predictions = np.zeros(len(scores), dtype=int)
+    predictions[idx] = 1
+    return predictions
+
+
+def _event_recall(labels: np.ndarray, predictions: np.ndarray) -> float | None:
+    segments = _segments(labels)
+    if not segments:
+        return None
+    detected = sum(1 for start, end in segments if predictions[start:end].any())
+    return float(detected / len(segments))
+
+
+def _event_precision(labels: np.ndarray, predictions: np.ndarray) -> float | None:
+    pred_segments = _segments(predictions)
+    if not pred_segments:
+        return 0.0
+    labels = np.asarray(labels).astype(int)
+    overlapping = sum(1 for start, end in pred_segments if labels[start:end].any())
+    return float(overlapping / len(pred_segments))
+
+
+def practical_range_metrics(
+    labels: np.ndarray,
+    scores: np.ndarray,
+    budgets: tuple[float, ...] = (0.01, 0.03, 0.05),
+) -> dict[str, float | None]:
+    """Threshold-free and fixed-budget metrics for practical range detection."""
+    labels = np.asarray(labels).astype(int)
+    scores = normalize_scores(scores)
+    if labels.sum() == 0 or labels.sum() == len(labels):
+        return {
+            "pauc_fpr_05": None,
+            **{f"event_recall_top_{int(b * 100)}": None for b in budgets},
+            **{f"event_precision_top_{int(b * 100)}": None for b in budgets},
+        }
+
+    out: dict[str, float | None] = {}
+    try:
+        out["pauc_fpr_05"] = float(roc_auc_score(labels, scores, max_fpr=0.05))
+    except ValueError:
+        out["pauc_fpr_05"] = None
+
+    for budget in budgets:
+        predictions = _top_budget_predictions(scores, budget)
+        suffix = int(budget * 100)
+        out[f"event_recall_top_{suffix}"] = _event_recall(labels, predictions)
+        out[f"event_precision_top_{suffix}"] = _event_precision(labels, predictions)
+    return out
+
+
 def _dilate_labels(labels: np.ndarray, radius: int) -> np.ndarray:
     labels = np.asarray(labels).astype(int)
     if radius <= 0:

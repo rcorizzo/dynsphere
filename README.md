@@ -1,15 +1,17 @@
-# DynSphere: Pendulum-Based Anomaly Detection
+# DynSphere: Multi-Concept Dynamics for Contextual Anomaly Detection
 
-This repository contains the code, synthetic benchmark, experiment runners, for the DynSphere paper. DynSphere studies anomaly
+This repository contains the code, synthetic benchmark, and experiment runners for the DynSphere paper. DynSphere studies anomaly
 detection for multivariate sequences going beyond pointwise feature rarity, where abnormality is defined by invalid trajectory dynamics.
 
 ## Repository Structure
 
 - `pendulum_detector.py`: standalone DynSphere detector.
 - `neural_baselines.py`: autoencoder, window-kNN, forecasting MLP, DeepSVDD, DynSphereAE, and DynSphere++ implementations.
-- `range_metrics.py`: AUROC/AUPRC helpers and VUS wrapper/fallback logic.
+- `range_metrics.py`: AUROC/AUPRC helpers, point-adjusted F1, and VUS wrapper/fallback logic.
 - `generate_pendulum_dataset.py`: synthetic benchmark generator.
 - `run_benchmarks.py`: synthetic benchmark runner.
+- `benchmarks/run_deep_tsad_paper.py`: paper-protocol runner for the retained
+  neural sequence baselines abbreviated as Omni, AT, and TranAD in the paper.
 - `benchmarks/tsb_ad_m/`: TSB-AD-M download, execution, and analysis scripts.
 - `benchmarks/real_world_datasets/`: BATADAL, HAI-20.07, PowerSystem, and related real-world dataset experiments.
 - `data/contextual/`: contextual-only synthetic train/test split used in the paper.
@@ -92,29 +94,24 @@ python3 run_benchmarks.py \
   --out results/contextual_pyod_vus_results.json
 ```
 
-Current contextual-only Table I values:
+Run the retained deep time-series baselines on the contextual benchmark:
 
-| Method | AUROC | VUS-ROC |
-| --- | ---: | ---: |
-| IForest | 0.4939 | 0.5639 |
-| HBOS | 0.5098 | 0.5774 |
-| COPOD | 0.5022 | 0.5673 |
-| LOF | 0.4978 | 0.5812 |
-| kNN | 0.4981 | 0.5779 |
-| PMLP | 0.5962 | 0.7055 |
-| Window-kNN | 0.7068 | 0.7855 |
-| AutoEncoder | 0.5261 | 0.6058 |
-| DeepSVDD | 0.5052 | 0.5855 |
-| DynSphere | 0.6725 | 0.7024 |
-| DynSphereAE | 0.7810 | 0.8421 |
-| DynSphere++ | 0.7680 | 0.8360 |
+```bash
+python3 benchmarks/run_deep_tsad_paper.py \
+  --out-dir results/deep_tsad_paper_full_windows \
+  --methods OmniAnomaly AnomalyTransformer TranAD \
+  --seeds 37 38 39 \
+  --datasets contextual \
+  --include-vus \
+  --resume
+```
 
 ## Real-World Benchmarks
 
 The paper reports complete-source TSB-AD-M runs for MSL, SMAP, and SMD, plus
 real-world datasets BATADAL, HAI-20.07, and PowerSystem.
 
-To run DynSphere mehtod variants from CLI use: `dynsphere`,
+To run DynSphere method variants from the CLI use: `dynsphere`,
 `dynsphere_ae`, and `dynsphere_pp`.
 
 Download TSB-AD-M. The archive is written under `benchmarks/tsb_ad_m/data/`,
@@ -173,6 +170,26 @@ python3 benchmarks/tsb_ad_m/run_tsb_ad_m.py \
   --out-dir benchmarks/tsb_ad_m/results_static_ae_table2_official_vus
 ```
 
+Run the retained deep time-series baselines on the paper protocol. This command
+uses all windows generated from the same processed sequences used by the other
+methods. For MSL, SMAP, and SMD it evaluates complete source-family files; for
+BATADAL, HAI-20.07, and PowerSystem it follows the row counts documented above.
+
+```bash
+python3 benchmarks/run_deep_tsad_paper.py \
+  --out-dir results/deep_tsad_paper_full_windows \
+  --methods OmniAnomaly AnomalyTransformer TranAD \
+  --seeds 37 38 39 \
+  --datasets contextual tsb real_world \
+  --include-vus \
+  --resume
+```
+
+The runner writes:
+
+- `results/deep_tsad_paper_full_windows/deep_tsad_paper_results.csv`
+- `results/deep_tsad_paper_full_windows/deep_tsad_paper_summary.json`
+
 Run the real-world datasets. The real-world dataset runner processes
 one dataset per command:
 
@@ -217,3 +234,152 @@ python3 benchmarks/real_world_datasets/run_real_world_datasets.py \
 The `--max-train-rows` and `--max-test-rows` arguments generate the subsampled
 versions used in the paper at run time. No derived third-party CSV needs to be
 committed.
+
+## Reproducibility Checklist
+
+This section is intended to make the paper artifact self-contained with respect
+to dataset, code, and experimental reporting requirements.
+
+### Dataset Statistics, Splits, and Preprocessing
+
+| Dataset | Examples used | Features | Positives | Split/protocol | Preprocessing and exclusions |
+| --- | ---: | ---: | ---: | --- | --- |
+| DynSphere-Contextual | train 57,600; test 28,800 | 12 observed `x_*` features | test 1,155 | normal-only generated training trajectories; labeled generated test trajectories | latent/debug columns are excluded from detector inputs; sequences are sorted by `entity_id,time` |
+| MSL | 16 complete source-family files | file-dependent multivariate telemetry | file-dependent | transductive unsupervised evaluation per labeled file | all rows in each selected complete source-family file are used; labels are used only for metrics |
+| SMAP | 27 complete source-family files | file-dependent multivariate telemetry | file-dependent | transductive unsupervised evaluation per labeled file | all rows in each selected complete source-family file are used; labels are used only for metrics |
+| SMD | 22 complete source-family files | file-dependent server metrics | file-dependent | transductive unsupervised evaluation per labeled file | all rows in each selected complete source-family file are used; labels are used only for metrics |
+| BATADAL | train 8,761; test 4,177 | 43 | test 219 | BATADAL dataset 03 for normal training; dataset 04 for labeled testing | numeric common columns only; `ATT_FLAG` is the label and excluded from inputs |
+| HAI-20.07 | train 19,350; test 29,160 | 59 | test 1,144 | normal rows from `train1.csv.gz`; labeled `test1.csv.gz` | numeric common columns only; `attack` is the label and excluded from inputs; uniform row subsampling is applied by the runner |
+| PowerSystem | train 11,357; test 26,126 | 128 | test 18,555 | normal rows from combined binary file; same labeled file for testing | numeric columns only; `marker` is the label and excluded from inputs; uniform row subsampling is applied by the runner |
+
+For the generated contextual benchmark, no human annotation was collected. The
+data-generation process is deterministic given the random seed and is fully
+specified by `generate_pendulum_dataset.py`; anomaly labels are assigned by the
+simulator according to the contextual anomaly mechanisms encoded in that script.
+There are therefore no annotators or annotation quality-control procedures.
+
+Raw third-party datasets are not redistributed, except for the generated
+contextual split under `data/contextual/`. Download links or scripts are listed
+above in `Dataset Redistribution and Attribution`.
+
+### Dependencies, Code, and Models
+
+- Dependencies are specified in `requirements.txt`; the optional official VUS
+  dependency can be installed with the `uv run --with ... --with vus` commands
+  shown above.
+- Training and evaluation code are included in `run_benchmarks.py`,
+  `benchmarks/tsb_ad_m/run_tsb_ad_m.py`,
+  `benchmarks/real_world_datasets/run_real_world_datasets.py`, and
+  `benchmarks/run_deep_tsad_paper.py`.
+- No pretrained models are used or required. All models are trained from
+  scratch within each run.
+- Result folders and third-party data folders are intentionally ignored by git;
+  rerun the commands in this README to regenerate them.
+
+### Metrics
+
+The paper reports:
+
+- `AUROC`: threshold-free point-wise ROC area.
+- `VUS-ROC`: official VUS ROC metric when the `vus` package is available; the
+  sliding-window parameter is set to the median labeled anomaly length unless
+  explicitly overridden.
+- `pAUC@FPR<=5%`: standardized partial AUROC over the low-false-positive
+  operating region. This is reported as a supplementary real-world diagnostic.
+
+The code also computes `AUPRC`, `VUS-PR`, point-adjusted F1, and fixed-budget
+event metrics for diagnostics, but these are not the main paper metrics.
+
+### Hyperparameters and Runs
+
+Hyperparameters are fixed rather than tuned on test labels.
+
+| Component | Setting used in paper |
+| --- | --- |
+| DynSphere | 4 concepts, PCA latent states, local ridge dynamics, median/MAD calibration |
+| DynSphereAE | DynSphere plus sequence autoencoder; `beta_ae=1`, `beta_p=0.5` |
+| DynSphere++ | score fusion with `beta_ae=1`, `beta_p=0.35`, `beta_win=0.2`, `beta_if=0.15` |
+| Deep sequence baselines | 5 epochs, window length 16, batch size 128, learning rate `1e-3` |
+| Classical baselines | PyOD/scikit-learn defaults except fixed random seed where applicable |
+
+The contextual benchmark and the single-source real-world datasets are reported
+over seeds 37, 38, and 39 in the paper tables where standard deviations are
+shown. MSL, SMAP, and SMD aggregate all completed complete-source file
+executions belonging to each source family; the dispersion reported in the paper
+summarizes the corresponding execution set, not seed-only variation per file.
+
+### Paper Result Tables
+
+Contextual benchmark, mean over the paper runs:
+
+| Method | AUROC | VUS-ROC |
+| --- | ---: | ---: |
+| IForest | 0.504 | 0.574 |
+| HBOS | 0.500 | 0.571 |
+| COPOD | 0.501 | 0.566 |
+| LOF | 0.496 | 0.580 |
+| kNN | 0.498 | 0.577 |
+| PMLP | 0.593 | 0.703 |
+| Window-kNN | 0.707 | 0.786 |
+| AutoEncoder | 0.527 | 0.603 |
+| DeepSVDD | 0.489 | 0.568 |
+| OmniAnomaly | 0.542 | 0.561 |
+| Anomaly Transformer | 0.556 | 0.559 |
+| TranAD | 0.548 | 0.563 |
+| DynSphere | 0.672 | 0.704 |
+| DynSphereAE | 0.778 | 0.840 |
+| DynSphere++ | 0.766 | 0.835 |
+
+Real-world benchmark, AUROC/VUS-ROC means from the paper table:
+
+| Dataset | Best DynSphere-family AUROC/VUS-ROC | Best overall note |
+| --- | --- | --- |
+| MSL | DynSphere++ 0.698/0.765 | DeepSVDD has the strongest AUROC/VUS-ROC |
+| SMAP | DynSphere++ 0.667/0.715 | DynSphere++ is strongest |
+| SMD | DynSphere++ 0.884/0.905 | DynSphere++ has strongest AUROC; Omni has strongest VUS-ROC |
+| BATADAL | DynSphereAE 0.950/0.976 | DynSphereAE has strongest AUROC; DynSphere has strongest VUS-ROC |
+| HAI-20.07 | DynSphere 0.831/0.805 | DynSphere has strongest AUROC |
+| PowerSystem | DynSphere 0.649/0.842 | DynSphere has strongest AUROC/VUS-ROC |
+
+Supplementary low-FPR diagnostic on single-source real-world datasets:
+
+| Method | BATADAL | HAI-20.07 | PowerSystem | Rank sum |
+| --- | ---: | ---: | ---: | ---: |
+| IForest | 0.536 | 0.531 | 0.504 | 41 |
+| HBOS | 0.540 | 0.512 | 0.504 | 43 |
+| COPOD | 0.580 | 0.732 | 0.504 | 28 |
+| LOF | 0.692 | 0.580 | 0.502 | 39 |
+| kNN | 0.703 | 0.671 | 0.512 | 30 |
+| PMLP | 0.768 | 0.705 | 0.515 | 15 |
+| Window-kNN | 0.766 | 0.704 | 0.524 | 15 |
+| AutoEncoder | 0.710 | 0.637 | 0.513 | 27 |
+| DeepSVDD | 0.677 | 0.623 | 0.511 | 35 |
+| Omni | 0.753 | 0.685 | 0.513 | 25 |
+| AT | 0.754 | 0.689 | 0.512 | 23 |
+| TranAD | 0.754 | 0.685 | 0.515 | 19 |
+| DynSphere | 0.783 | 0.765 | 0.591 | 3 |
+| DynSphereAE | 0.770 | 0.710 | 0.542 | 8 |
+| DynSphere++ | 0.770 | 0.709 | 0.538 | 9 |
+
+Empirical runtime table from the paper, wall-clock seconds on CPU:
+
+| Method | Contextual | MSL | SMAP | SMD | BATADAL | HAI-20.07 | PowerSystem |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| IForest | 0.5 | 9.5 | 33.0 | 45.7 | 0.5 | 0.8 | 0.8 |
+| HBOS | 1.2 | 5.7 | 24.1 | 28.6 | 3.4 | 2.5 | 2.6 |
+| COPOD | 0.2 | 6.2 | 26.0 | 38.3 | 0.4 | 0.8 | 1.3 |
+| LOF | 1.5 | 6.7 | 28.8 | 48.6 | 0.6 | 4.4 | 3.4 |
+| kNN | 1.5 | 6.6 | 29.1 | 51.3 | 0.6 | 4.3 | 3.6 |
+| PMLP | 7.6 | 14.1 | 57.0 | 131.5 | 2.0 | 3.2 | 3.8 |
+| Window-kNN | 17.8 | 8.0 | 34.1 | 117.6 | 1.5 | 28.0 | 30.9 |
+| AutoEncoder | 8.1 | 15.0 | 46.7 | 92.9 | 3.4 | 4.4 | 3.7 |
+| DeepSVDD | 17.4 | 12.1 | 43.5 | 82.0 | 2.1 | 3.6 | 2.6 |
+| OmniAnomaly | 19.0 | 18.0 | 69.1 | 154.6 | 2.5 | 6.7 | 21.9 |
+| Anomaly Transformer | 31.7 | 32.7 | 131.7 | 326.4 | 5.2 | 12.9 | 24.7 |
+| TranAD | 61.4 | 59.6 | 237.6 | 610.6 | 9.3 | 24.9 | 32.1 |
+| DynSphere | 1.7 | 7.9 | 32.3 | 81.4 | 1.1 | 5.7 | 23.8 |
+| DynSphereAE | 10.1 | 26.0 | 86.1 | 262.9 | 4.6 | 12.6 | 31.4 |
+| DynSphere++ | 65.9 | 34.7 | 111.8 | 447.1 | 11.9 | 65.9 | 76.7 |
+
+All timings were measured on CPU using a MacBook Pro with an Apple M1 Max
+processor and 64 GB of RAM. Exact energy cost was not measured.
