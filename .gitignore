@@ -66,3 +66,8 @@ data/pendulum_multiconcept_*.json
 
 # Local helper scripts not intended for the public artifact.
 scripts/
+
+# Generated source checkouts and environments for official baseline evaluation.
+benchmarks/official_baselines/.external/
+benchmarks/official_baselines/.envs/
+benchmarks/official_baselines/.work/

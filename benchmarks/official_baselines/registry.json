@@ -1,0 +1,186 @@
+{
+  "schema_version": "official-baseline-registry-v1",
+  "implementations": [
+    {
+      "method_id": "pca_reconstruction",
+      "display_name": "PCA reconstruction",
+      "source_kind": "local",
+      "implementation_category": "repository-maintained",
+      "repository_url": ".",
+      "revision": "current-git-commit",
+      "python": ">=3.9",
+      "adapter_command": ["__local__", "pca_reconstruction"],
+      "default_hyperparameters": {"variance_retained": 0.95},
+      "fallback_ids": []
+    },
+    {
+      "method_id": "kmeans_distance",
+      "display_name": "KMeans distance",
+      "source_kind": "local",
+      "implementation_category": "repository-maintained",
+      "repository_url": ".",
+      "revision": "current-git-commit",
+      "python": ">=3.9",
+      "adapter_command": ["__local__", "kmeans_distance"],
+      "default_hyperparameters": {"n_clusters": 4, "n_init": 20},
+      "fallback_ids": []
+    },
+    {
+      "method_id": "dagmm",
+      "display_name": "DAGMM",
+      "source_kind": "external",
+      "implementation_category": "benchmark-maintained",
+      "repository_url": "https://github.com/decisionintelligence/TAB.git",
+      "revision": "5a7e6f80c405eed7c4dd1390f69fbba2fd8ddcf2",
+      "python": "3.8",
+      "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.tab_dagmm"],
+      "default_hyperparameters": {"epochs": 10, "batch_size": 128},
+      "fallback_ids": ["dagmm_tsb_ad"]
+    },
+    {
+      "method_id": "catch",
+      "display_name": "CATCH",
+      "source_kind": "external",
+      "implementation_category": "author-released",
+      "repository_url": "https://github.com/decisionintelligence/CATCH.git",
+      "revision": "3647c69be5eb56649b072596cf89098e689e20c3",
+      "python": "3.8",
+      "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.catch"],
+      "default_hyperparameters": {"window_size": 100, "epochs": 10},
+      "fallback_ids": ["catch_tab"]
+    },
+    {
+      "method_id": "mtad_gat",
+      "display_name": "MTAD-GAT",
+      "source_kind": "external",
+      "implementation_category": "author-released",
+      "repository_url": "https://github.com/ML4ITS/mtad-gat-pytorch.git",
+      "revision": "a3719416527d57e0e364f9b489c5368ade1bc8e7",
+      "python": "3.10",
+      "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.mtad_gat"],
+      "default_hyperparameters": {"window_size": 100, "epochs": 10},
+      "fallback_ids": []
+    },
+    {
+      "method_id": "omni_anomaly",
+      "display_name": "OmniAnomaly",
+      "source_kind": "external",
+      "implementation_category": "author-released",
+      "repository_url": "https://github.com/NetManAIOps/OmniAnomaly.git",
+      "revision": "7fb0e0acf89ea49908896bcc9f9e80fcfff6baf4",
+      "python": "3.8",
+      "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.omni_anomaly"],
+      "default_hyperparameters": {"window_size": 100, "epochs": 20},
+      "fallback_ids": ["omni_anomaly_tsb_ad"]
+    },
+    {
+      "method_id": "anomaly_transformer",
+      "display_name": "Anomaly Transformer",
+      "source_kind": "external",
+      "implementation_category": "author-released",
+      "repository_url": "https://github.com/thuml/Anomaly-Transformer.git",
+      "revision": "b0ee470c8012bff857fb600462aec6209c4a18d9",
+      "python": "3.8",
+      "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.anomaly_transformer"],
+      "default_hyperparameters": {"window_size": 100, "epochs": 3},
+      "fallback_ids": ["anomaly_transformer_tsb_ad"]
+    },
+    {
+      "method_id": "tranad",
+      "display_name": "TranAD",
+      "source_kind": "external",
+      "implementation_category": "author-released",
+      "repository_url": "https://github.com/imperial-qore/TranAD.git",
+      "revision": "7ffb98d0c18189cc3d9ab732b4cb0278200a0af0",
+      "python": "3.9",
+      "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.tranad"],
+      "default_hyperparameters": {"window_size": 10, "epochs": 5},
+      "fallback_ids": ["tranad_tsb_ad"]
+    },
+    {
+      "method_id": "predictive_euclidean_single",
+      "display_name": "One-step Euclidean predictor",
+      "source_kind": "local",
+      "implementation_category": "repository-maintained",
+      "repository_url": ".",
+      "revision": "current-git-commit",
+      "python": ">=3.9",
+      "adapter_command": ["__local__", "predictive_euclidean_single"],
+      "default_hyperparameters": {"geometry": "euclidean", "n_modes": 1},
+      "fallback_ids": []
+    },
+    {
+      "method_id": "dynsphere_one_regime",
+      "display_name": "DynSphere one regime",
+      "source_kind": "local",
+      "implementation_category": "repository-maintained",
+      "repository_url": ".",
+      "revision": "current-git-commit",
+      "python": ">=3.9",
+      "adapter_command": ["__local__", "dynsphere_one_regime"],
+      "default_hyperparameters": {"n_concepts": 1},
+      "fallback_ids": []
+    },
+    {
+      "method_id": "catch_tab",
+      "display_name": "CATCH (TAB fallback)",
+      "source_kind": "external",
+      "implementation_category": "benchmark-maintained-fallback",
+      "repository_url": "https://github.com/decisionintelligence/TAB.git",
+      "revision": "5a7e6f80c405eed7c4dd1390f69fbba2fd8ddcf2",
+      "python": "3.8",
+      "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.catch", "--backend", "tab"],
+      "default_hyperparameters": {"window_size": 100, "epochs": 10},
+      "fallback_ids": []
+    },
+    {
+      "method_id": "dagmm_tsb_ad",
+      "display_name": "DAGMM (TSB-AD fallback)",
+      "source_kind": "external",
+      "implementation_category": "benchmark-maintained-fallback",
+      "repository_url": "https://github.com/TheDatumOrg/TSB-AD.git",
+      "revision": "ed74348e7876c9268b7a737c77f2f5f56f7fa458",
+      "python": "3.10",
+      "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.tab_dagmm", "--backend", "tsb-ad"],
+      "default_hyperparameters": {"epochs": 10, "batch_size": 128},
+      "fallback_ids": []
+    },
+    {
+      "method_id": "omni_anomaly_tsb_ad",
+      "display_name": "OmniAnomaly (TSB-AD fallback)",
+      "source_kind": "external",
+      "implementation_category": "benchmark-maintained-fallback",
+      "repository_url": "https://github.com/TheDatumOrg/TSB-AD.git",
+      "revision": "ed74348e7876c9268b7a737c77f2f5f56f7fa458",
+      "python": "3.10",
+      "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.omni_anomaly", "--backend", "tsb-ad"],
+      "default_hyperparameters": {"window_size": 100, "epochs": 20},
+      "fallback_ids": []
+    },
+    {
+      "method_id": "anomaly_transformer_tsb_ad",
+      "display_name": "Anomaly Transformer (TSB-AD fallback)",
+      "source_kind": "external",
+      "implementation_category": "benchmark-maintained-fallback",
+      "repository_url": "https://github.com/TheDatumOrg/TSB-AD.git",
+      "revision": "ed74348e7876c9268b7a737c77f2f5f56f7fa458",
+      "python": "3.10",
+      "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.anomaly_transformer", "--backend", "tsb-ad"],
+      "default_hyperparameters": {"window_size": 100, "epochs": 3},
+      "fallback_ids": []
+    },
+    {
+      "method_id": "tranad_tsb_ad",
+      "display_name": "TranAD (TSB-AD fallback)",
+      "source_kind": "external",
+      "implementation_category": "benchmark-maintained-fallback",
+      "repository_url": "https://github.com/TheDatumOrg/TSB-AD.git",
+      "revision": "ed74348e7876c9268b7a737c77f2f5f56f7fa458",
+      "python": "3.10",
+      "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.tranad", "--backend", "tsb-ad"],
+      "default_hyperparameters": {"window_size": 10, "epochs": 5},
+      "fallback_ids": []
+    }
+  ]
+}
+
