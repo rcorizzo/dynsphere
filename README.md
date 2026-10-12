@@ -1,3 +1,5 @@
+[Official baseline and expanded evaluation protocol](benchmarks/official_baselines/README.md)
+
 # DynSphere: Multi-Concept Dynamics for Contextual Anomaly Detection
 
 This repository contains the code, synthetic benchmark, and experiment runners for the DynSphere paper. DynSphere studies anomaly
