@@ -163,11 +163,21 @@ def run_external(
         },
     )
     environment = os.environ.copy()
+    runtime_state = output_dir / "runtime_state"
+    dgl_state = runtime_state / "dgl"
+    matplotlib_state = runtime_state / "matplotlib"
+    cache_state = runtime_state / "cache"
+    for directory in (dgl_state, matplotlib_state, cache_state):
+        directory.mkdir(parents=True, exist_ok=True)
     environment.update(
         {
             "PYTHONHASHSEED": str(seed),
             "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
             "OMP_NUM_THREADS": environment.get("OMP_NUM_THREADS", "1"),
+            "DGLBACKEND": "pytorch",
+            "DGLDEFAULTDIR": str(dgl_state),
+            "MPLCONFIGDIR": str(matplotlib_state),
+            "XDG_CACHE_HOME": str(cache_state),
         }
     )
     try:

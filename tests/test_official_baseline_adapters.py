@@ -147,6 +147,25 @@ def test_setup_command_error_retains_dependency_diagnostic() -> None:
         )
 
 
+def test_anomaly_transformer_cpu_compatibility_replaces_cuda_transfer() -> None:
+    class Tensor:
+        def cuda(self):
+            return "cuda"
+
+    class Cuda:
+        @staticmethod
+        def is_available():
+            return False
+
+    Torch = type("Torch", (), {"cuda": Cuda(), "Tensor": Tensor})
+
+    changed = anomaly_transformer._enable_cpu_compatibility(Torch)
+    value = Tensor()
+
+    assert changed is True
+    assert value.cuda() is value
+
+
 @pytest.mark.parametrize("adapter", ADAPTERS, ids=lambda module: module.METHOD_ID)
 def test_adapters_fit_train_score_test_and_align_warmup(
     tmp_path: Path, adapter

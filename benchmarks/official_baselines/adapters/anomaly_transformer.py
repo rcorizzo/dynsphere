@@ -20,6 +20,19 @@ from benchmarks.official_baselines.adapters.common import (
 METHOD_ID = "anomaly_transformer"
 
 
+def _enable_cpu_compatibility(torch) -> bool:
+    """Keep the author's unconditional CUDA transfers on the CPU when required."""
+    if torch.cuda.is_available():
+        return False
+
+    def remain_on_cpu(tensor, *args, **kwargs):
+        del args, kwargs
+        return tensor
+
+    torch.Tensor.cuda = remain_on_cpu
+    return True
+
+
 def _windows(values, window):
     import torch
 
@@ -40,6 +53,7 @@ def official_backend(
     from torch.utils.data import DataLoader, TensorDataset
 
     torch.manual_seed(seed)
+    cpu_compatibility = _enable_cpu_compatibility(torch)
     source = source_directory(METHOD_ID)
     sys.path.insert(0, str(source))
     try:
@@ -110,6 +124,7 @@ def official_backend(
             "backend": "author Anomaly Transformer",
             "window_size": window,
             "d_model": int(configuration.get("d_model", 128)),
+            "device": "cpu" if cpu_compatibility else "cuda",
         },
     )
 
@@ -128,4 +143,3 @@ def run_adapter(
 
 if __name__ == "__main__":
     adapter_main(METHOD_ID, official_backend)
-

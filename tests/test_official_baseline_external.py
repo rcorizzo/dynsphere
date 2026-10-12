@@ -63,12 +63,22 @@ def test_fake_adapter_receives_only_public_input_and_returns_scores(tmp_path: Pa
         )
     )
     assert received["files"] == ["metadata.json", "test.npy", "train.npy"]
+    assert received["environment"]["DGLBACKEND"] == "pytorch"
+    for name in ("DGLDEFAULTDIR", "MPLCONFIGDIR", "XDG_CACHE_HOME"):
+        assert Path(received["environment"][name]).is_relative_to(tmp_path / "output")
     serialized = json.dumps(received).lower()
     assert "labels.npy" not in serialized
     assert str(bundle.private_dir).lower() not in serialized
     record = json.loads((tmp_path / "output" / "run.json").read_text(encoding="utf-8"))
     assert record["requested_method_id"] == "fake"
     assert record["executed_method_id"] == "fake"
+
+
+def test_repository_benchmarks_package_has_precedence() -> None:
+    import benchmarks
+
+    expected = Path(__file__).resolve().parents[1] / "benchmarks" / "__init__.py"
+    assert Path(benchmarks.__file__).resolve() == expected
 
 
 @pytest.mark.parametrize(

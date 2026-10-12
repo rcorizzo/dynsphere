@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from pathlib import Path
 
@@ -25,6 +26,10 @@ def main() -> None:
         "files": sorted(path.name for path in args.input_dir.iterdir()),
         "seed": args.seed,
         "configuration": json.loads(args.config_json.read_text(encoding="utf-8")),
+        "environment": {
+            name: os.environ.get(name, "")
+            for name in ("DGLBACKEND", "DGLDEFAULTDIR", "MPLCONFIGDIR", "XDG_CACHE_HOME")
+        },
     }
     (args.output_dir / "received.json").write_text(
         json.dumps(received, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -54,4 +59,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
