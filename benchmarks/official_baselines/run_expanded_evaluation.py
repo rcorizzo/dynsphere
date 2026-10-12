@@ -349,6 +349,7 @@ def execute_job(job: ExperimentJob) -> dict[str, object]:
         "seed": job.case.seed,
         "method_id": job.implementation.method_id,
         "implementation_revision": job.implementation.revision,
+        "adapter_revision": job.implementation.adapter_revision,
         "implementation_category": job.implementation.implementation_category,
         "hyperparameters": dict(job.hyperparameters),
         "data_digest": digest,

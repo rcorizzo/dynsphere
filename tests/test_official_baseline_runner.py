@@ -202,6 +202,7 @@ def test_resume_skips_only_valid_matching_complete_record(tmp_path: Path, monkey
     third = execute_job(selected)
     assert len(calls) == 2
     assert third["skipped"] is False
+    assert first["adapter_revision"] == local_spec().adapter_revision
 
 
 def test_identity_inputs_produce_distinct_run_directories(tmp_path: Path, monkeypatch) -> None:

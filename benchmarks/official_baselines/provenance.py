@@ -40,6 +40,7 @@ class ImplementationSpec:
     fallback_ids: tuple[str, ...]
     runtime_requirements: tuple[str, ...] = ()
     install_upstream_requirements: bool = True
+    adapter_revision: str = ""
 
 
 def resolve_local_revision(repo: Path) -> str:
@@ -133,6 +134,7 @@ def _parse_entry(raw: object, repo_root: Path | None) -> ImplementationSpec:
         fallback_ids=tuple(fallbacks),
         runtime_requirements=tuple(runtime_requirements),
         install_upstream_requirements=install_upstream_requirements,
+        adapter_revision=resolve_local_revision(repo_root) if repo_root is not None else "",
     )
 
 
@@ -145,6 +147,8 @@ def validate_registry(specs: Mapping[str, ImplementationSpec]) -> None:
             raise ValueError(f"Registry key mismatch for {method_id!r}")
         if _COMMIT_PATTERN.fullmatch(spec.revision) is None:
             raise ValueError(f"Implementation {method_id!r} has a mutable revision")
+        if _COMMIT_PATTERN.fullmatch(spec.adapter_revision) is None:
+            raise ValueError(f"Implementation {method_id!r} has a mutable adapter revision")
         for fallback_id in spec.fallback_ids:
             if fallback_id == method_id or fallback_id not in specs:
                 raise ValueError(f"Invalid fallback {fallback_id!r} for {method_id!r}")
@@ -183,6 +187,7 @@ def run_identity(
         "case_identity": case_identity,
         "method_id": implementation.method_id,
         "revision": implementation.revision,
+        "adapter_revision": implementation.adapter_revision,
         "runtime_requirements": list(implementation.runtime_requirements),
         "install_upstream_requirements": implementation.install_upstream_requirements,
         "hyperparameters": dict(hyperparameters),

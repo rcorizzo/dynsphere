@@ -49,6 +49,7 @@ def test_registry_has_all_required_methods_with_resolved_revisions() -> None:
     ).stdout.strip()
     local_revisions = {spec.revision for spec in specs.values() if spec.source_kind == "local"}
     assert local_revisions == {current}
+    assert {spec.adapter_revision for spec in specs.values()} == {current}
     assert resolve_local_revision(REPO_ROOT) == current
 
 
@@ -149,6 +150,7 @@ def test_run_identity_changes_for_every_reproducibility_input() -> None:
         {"implementation": replace(base_spec, revision="b" * 40)},
         {"implementation": replace(base_spec, runtime_requirements=("torch==1.0",))},
         {"implementation": replace(base_spec, install_upstream_requirements=False)},
+        {"implementation": replace(base_spec, adapter_revision="c" * 40)},
         {"hyperparameters": {"window": 32}},
         {"seed": 38},
         {"data_digest": "data-b"},
