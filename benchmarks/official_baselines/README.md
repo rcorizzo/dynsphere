@@ -250,3 +250,29 @@ Run the complete repository verification before interpreting results:
 Do not copy values from the historical local-proxy result files into the new
 comparison. Any paper-table replacement requires the completion and readiness
 reports from this protocol.
+
+## 11. Portable MacBook and Cluster Runners
+
+Named campaign profiles, deterministic job partitioning, and scheduler array
+wrappers are documented in [HPC_EXECUTION.md](HPC_EXECUTION.md). The supported
+targets are:
+
+1. sequential MacBook execution through `--profile macbook-safe`;
+2. American University Lovelace through the LSF array wrapper;
+3. PLGrid through the SLURM array wrapper.
+
+Inspect any profile without fitting models:
+
+```bash
+.venv/bin/python -m benchmarks.official_baselines.run_campaign \
+  --profile macbook-safe --dry-run
+```
+
+Campaign-scoped aggregation excludes historical, smoke, and unrelated run
+records:
+
+```bash
+.venv/bin/python -m benchmarks.official_baselines.aggregate_campaign \
+  --campaign-manifest results/official_baselines_v1/campaigns/macbook-safe.json \
+  --result-root results/official_baselines_v1
+```

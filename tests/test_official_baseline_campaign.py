@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -131,3 +133,21 @@ def test_existing_different_campaign_manifest_is_not_overwritten(tmp_path: Path)
 
     with pytest.raises(ValueError, match="different campaign"):
         write_campaign_manifest(path, campaign_document("test", (_job(0),), 1))
+
+
+def test_campaign_aggregation_cli_exposes_manifest_filter() -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "benchmarks.official_baselines.aggregate_campaign",
+            "--help",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "--campaign-manifest" in completed.stdout
+    assert "--result-root" in completed.stdout
