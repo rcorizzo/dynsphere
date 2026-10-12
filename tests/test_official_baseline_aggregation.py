@@ -238,3 +238,62 @@ def test_aggregation_can_exclude_stale_adapter_revisions(
     assert per_run.auprc.tolist() == [9.0]
     assert report["expected_adapter_revision"] == "b" * 40
     assert report["excluded_stale_record_count"] == 1
+
+
+def test_campaign_manifest_excludes_unlisted_records(tmp_path: Path, monkeypatch) -> None:
+    result_root = tmp_path / "results"
+    revision = "c" * 40
+    write_result(
+        result_root,
+        "method-a",
+        "Family",
+        "trajectory",
+        37,
+        2.0,
+        adapter_revision=revision,
+    )
+    write_result(
+        result_root,
+        "method-b",
+        "Family",
+        "trajectory",
+        37,
+        8.0,
+        adapter_revision=revision,
+    )
+    manifest = tmp_path / "campaign.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": "official-baseline-campaign-v1",
+                "campaign_id": "campaign-123",
+                "expected_job_count": 1,
+                "expected_jobs": [
+                    {
+                        "adapter_revision": revision,
+                        "case_id": "Dataset/trajectory",
+                        "dataset_id": "Dataset",
+                        "method_id": "method-a",
+                        "seed": 37,
+                        "source_family": "Family",
+                        "trajectory_id": "trajectory",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(aggregate, "compute_metrics", metric_stub)
+
+    artifacts = aggregate_runs(
+        result_root,
+        tmp_path / "aggregate",
+        bootstrap_replicates=100,
+        campaign_manifest=manifest,
+    )
+
+    per_run = pd.read_csv(artifacts.per_run_csv)
+    report = json.loads(artifacts.readiness_json.read_text(encoding="utf-8"))
+    assert per_run.method_id.tolist() == ["method-a"]
+    assert report["campaign_id"] == "campaign-123"
+    assert report["excluded_noncampaign_record_count"] == 1

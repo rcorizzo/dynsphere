@@ -28,6 +28,15 @@ METRIC_COLUMNS = (
 )
 PRIMARY_METRICS = ("auprc", "vus_pr")
 PAIR_KEYS = ("dataset_id", "trajectory_id", "seed")
+CAMPAIGN_KEY_FIELDS = (
+    "case_id",
+    "dataset_id",
+    "source_family",
+    "trajectory_id",
+    "seed",
+    "method_id",
+    "adapter_revision",
+)
 
 
 @dataclass(frozen=True)
@@ -46,9 +55,33 @@ class AggregateArtifacts:
 def _read_records(
     result_root: Path,
     expected_adapter_revision: str | None = None,
-) -> tuple[list[tuple[Path, dict[str, object]]], int]:
+    campaign_manifest: Path | None = None,
+) -> tuple[list[tuple[Path, dict[str, object]]], int, int, str | None]:
     records: list[tuple[Path, dict[str, object]]] = []
     excluded_stale = 0
+    excluded_noncampaign = 0
+    campaign_id: str | None = None
+    expected_jobs: set[tuple[object, ...]] | None = None
+    if campaign_manifest is not None:
+        try:
+            campaign = json.loads(campaign_manifest.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"Campaign manifest is unreadable: {campaign_manifest}") from exc
+        if campaign.get("schema_version") != "official-baseline-campaign-v1":
+            raise ValueError("Campaign manifest has an unsupported schema")
+        raw_jobs = campaign.get("expected_jobs")
+        if not isinstance(raw_jobs, list):
+            raise ValueError("Campaign manifest expected_jobs must be a list")
+        if campaign.get("expected_job_count") != len(raw_jobs):
+            raise ValueError("Campaign manifest expected_job_count is inconsistent")
+        expected_jobs = set()
+        for row in raw_jobs:
+            if not isinstance(row, dict) or any(field not in row for field in CAMPAIGN_KEY_FIELDS):
+                raise ValueError("Campaign manifest contains an incomplete job entry")
+            expected_jobs.add(tuple(row[field] for field in CAMPAIGN_KEY_FIELDS))
+        campaign_id = str(campaign.get("campaign_id", ""))
+        if not campaign_id:
+            raise ValueError("Campaign manifest must identify campaign_id")
     for path in sorted((result_root / "runs").rglob("run.json")):
         try:
             record = json.loads(path.read_text(encoding="utf-8"))
@@ -62,8 +95,13 @@ def _read_records(
         ):
             excluded_stale += 1
             continue
+        if expected_jobs is not None:
+            key = tuple(record.get(field) for field in CAMPAIGN_KEY_FIELDS)
+            if key not in expected_jobs:
+                excluded_noncampaign += 1
+                continue
         records.append((path.parent, record))
-    return records, excluded_stale
+    return records, excluded_stale, excluded_noncampaign, campaign_id
 
 
 def _metric_row(
@@ -228,9 +266,14 @@ def aggregate_runs(
     bootstrap_seed: int = 20261011,
     bootstrap_replicates: int = 10000,
     expected_adapter_revision: str | None = None,
+    campaign_manifest: Path | None = None,
 ) -> AggregateArtifacts:
     """Compute run metrics and family-balanced summaries from terminal records."""
-    records, excluded_stale = _read_records(result_root, expected_adapter_revision)
+    records, excluded_stale, excluded_noncampaign, campaign_id = _read_records(
+        result_root,
+        expected_adapter_revision,
+        campaign_manifest,
+    )
     if not records:
         raise ValueError(f"No experiment records found under {result_root}")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -329,6 +372,9 @@ def aggregate_runs(
         "bootstrap_replicates": bootstrap_replicates,
         "expected_adapter_revision": expected_adapter_revision,
         "excluded_stale_record_count": excluded_stale,
+        "campaign_id": campaign_id,
+        "campaign_manifest": str(campaign_manifest) if campaign_manifest is not None else None,
+        "excluded_noncampaign_record_count": excluded_noncampaign,
         "weighting": "trajectory mean within source family, then unweighted source-family mean",
     }
     readiness_json.write_text(
