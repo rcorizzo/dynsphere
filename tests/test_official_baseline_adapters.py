@@ -166,6 +166,16 @@ def test_anomaly_transformer_cpu_compatibility_replaces_cuda_transfer() -> None:
     assert value.cuda() is value
 
 
+def test_tranad_upstream_import_arguments_are_scoped(monkeypatch) -> None:
+    original = ["adapter", "--input-dir", "private-input"]
+    monkeypatch.setattr(sys, "argv", original.copy())
+
+    with tranad._upstream_import_arguments():
+        assert sys.argv == ["adapter", "--dataset", "synthetic", "--model", "TranAD"]
+
+    assert sys.argv == original
+
+
 @pytest.mark.parametrize("adapter", ADAPTERS, ids=lambda module: module.METHOD_ID)
 def test_adapters_fit_train_score_test_and_align_warmup(
     tmp_path: Path, adapter

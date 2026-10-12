@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Mapping
 
@@ -18,6 +19,16 @@ from benchmarks.official_baselines.adapters.common import (
 
 
 METHOD_ID = "tranad"
+
+
+@contextmanager
+def _upstream_import_arguments():
+    original = sys.argv
+    sys.argv = [original[0], "--dataset", "synthetic", "--model", "TranAD"]
+    try:
+        yield
+    finally:
+        sys.argv = original
 
 
 def _prefix_windows(values, window):
@@ -44,7 +55,8 @@ def official_backend(
     source = source_directory(METHOD_ID)
     sys.path.insert(0, str(source))
     try:
-        from src.models import TranAD
+        with _upstream_import_arguments():
+            from src.models import TranAD
     finally:
         sys.path.pop(0)
     model = TranAD(train.shape[1]).double()
