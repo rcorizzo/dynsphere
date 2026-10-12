@@ -55,6 +55,7 @@ def source_spec(source: Path, revision: str, python: str | None = None) -> Imple
         adapter_command=("{python}", "adapter.py"),
         default_hyperparameters={},
         fallback_ids=(),
+        runtime_requirements=(),
     )
 
 
@@ -76,6 +77,8 @@ def test_setup_checks_out_detached_commit_and_reuses_verified_environment(
     assert first.environment_dir.joinpath("bin", "python").is_file()
     assert second.status == "ready"
     assert second.reused is True
+    marker = json.loads(first.environment_dir.joinpath("setup.json").read_text())
+    assert marker["runtime_requirements"] == []
 
 
 def test_setup_refuses_modified_source_checkout(tmp_path: Path, monkeypatch) -> None:

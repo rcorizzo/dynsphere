@@ -38,6 +38,7 @@ class ImplementationSpec:
     adapter_command: tuple[str, ...]
     default_hyperparameters: Mapping[str, object]
     fallback_ids: tuple[str, ...]
+    runtime_requirements: tuple[str, ...] = ()
 
 
 def resolve_local_revision(repo: Path) -> str:
@@ -96,6 +97,7 @@ def _parse_entry(raw: object, repo_root: Path | None) -> ImplementationSpec:
         raise ValueError("adapter_command must be a nonempty argument list")
     hyperparameters = raw["default_hyperparameters"]
     fallbacks = raw["fallback_ids"]
+    runtime_requirements = raw.get("runtime_requirements", [])
     string_fields = (
         "method_id",
         "display_name",
@@ -109,6 +111,10 @@ def _parse_entry(raw: object, repo_root: Path | None) -> ImplementationSpec:
         raise ValueError("default_hyperparameters must be an object")
     if not isinstance(fallbacks, list) or not all(isinstance(value, str) for value in fallbacks):
         raise ValueError("fallback_ids must be a list of method identifiers")
+    if not isinstance(runtime_requirements, list) or not all(
+        isinstance(value, str) and value for value in runtime_requirements
+    ):
+        raise ValueError("runtime_requirements must be a list of nonempty requirement strings")
 
     return ImplementationSpec(
         method_id=raw["method_id"],
@@ -121,6 +127,7 @@ def _parse_entry(raw: object, repo_root: Path | None) -> ImplementationSpec:
         adapter_command=tuple(command),
         default_hyperparameters=dict(hyperparameters),
         fallback_ids=tuple(fallbacks),
+        runtime_requirements=tuple(runtime_requirements),
     )
 
 
@@ -171,6 +178,7 @@ def run_identity(
         "case_identity": case_identity,
         "method_id": implementation.method_id,
         "revision": implementation.revision,
+        "runtime_requirements": list(implementation.runtime_requirements),
         "hyperparameters": dict(hyperparameters),
         "seed": seed,
         "data_digest": data_digest,

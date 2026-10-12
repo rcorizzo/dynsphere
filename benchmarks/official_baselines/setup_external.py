@@ -121,7 +121,11 @@ def verify_source(method_id: str, external_root: Path) -> SetupRecord:
         return SetupRecord(status="incompatible", reason="Environment is missing", **base)
     try:
         saved = json.loads(marker.read_text(encoding="utf-8"))
-        if saved.get("revision") != spec.revision or saved.get("python_request") != spec.python:
+        if (
+            saved.get("revision") != spec.revision
+            or saved.get("python_request") != spec.python
+            or saved.get("runtime_requirements") != list(spec.runtime_requirements)
+        ):
             raise ValueError("Environment marker does not match provenance")
         version = _run([str(python), "--version"])
         packages = _package_inventory(python)
@@ -170,10 +174,22 @@ def prepare_source(method_id: str, external_root: Path) -> SetupRecord:
                     str(requirements),
                 ]
             )
+        if spec.runtime_requirements:
+            _run(
+                [
+                    "uv",
+                    "pip",
+                    "install",
+                    "--python",
+                    str(python),
+                    *spec.runtime_requirements,
+                ]
+            )
         marker = {
             "method_id": method_id,
             "revision": spec.revision,
             "python_request": spec.python,
+            "runtime_requirements": list(spec.runtime_requirements),
         }
         environment_dir.joinpath("setup.json").write_text(
             json.dumps(marker, indent=2, sort_keys=True) + "\n", encoding="utf-8"

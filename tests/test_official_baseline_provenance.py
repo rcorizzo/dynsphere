@@ -100,6 +100,20 @@ def test_catch_uses_fixed_batch_size_valid_for_declared_training_prefixes() -> N
     assert specs["catch"].default_hyperparameters["batch_size"] == 32
 
 
+def test_adapter_runtime_constraints_are_part_of_provenance() -> None:
+    specs = load_registry(REGISTRY)
+
+    assert specs["anomaly_transformer"].runtime_requirements == (
+        "torch==2.4.1",
+        "numpy==1.24.4",
+    )
+    assert specs["tranad"].runtime_requirements == (
+        "torch==1.13.1",
+        "numpy==1.26.4",
+        "dgl==1.1.3",
+    )
+
+
 def test_run_identity_changes_for_every_reproducibility_input() -> None:
     base_spec = ImplementationSpec(
         method_id="external_method",
@@ -123,6 +137,7 @@ def test_run_identity_changes_for_every_reproducibility_input() -> None:
     )
     alternatives = [
         {"implementation": replace(base_spec, revision="b" * 40)},
+        {"implementation": replace(base_spec, runtime_requirements=("torch==1.0",))},
         {"hyperparameters": {"window": 32}},
         {"seed": 38},
         {"data_digest": "data-b"},
