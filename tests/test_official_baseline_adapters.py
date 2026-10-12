@@ -79,8 +79,13 @@ def test_setup_checks_out_detached_commit_and_reuses_verified_environment(
     assert second.reused is True
     marker = json.loads(first.environment_dir.joinpath("setup.json").read_text())
     assert marker["runtime_requirements"] == []
+    assert marker["install_upstream_requirements"] is True
     marker.pop("runtime_requirements")
     first.environment_dir.joinpath("setup.json").write_text(json.dumps(marker))
+    assert verify_source("fixture", root).status == "ready"
+    cache = first.source_dir / "__pycache__"
+    cache.mkdir(parents=True)
+    cache.joinpath("module.cpython-39.pyc").write_bytes(b"generated")
     assert verify_source("fixture", root).status == "ready"
 
 
@@ -180,6 +185,20 @@ def test_tranad_upstream_import_arguments_are_scoped(monkeypatch) -> None:
         assert sys.argv == ["adapter", "--dataset", "synthetic", "--model", "TranAD"]
 
     assert sys.argv == original
+
+
+def test_dagmm_loader_bypasses_unrelated_tods_package_initializers(tmp_path: Path) -> None:
+    package_root = tmp_path / "third_party"
+    dagmm = package_root / "tods" / "detection_algorithm" / "core" / "dagmm"
+    dagmm.mkdir(parents=True)
+    package_root.joinpath("tods", "__init__.py").write_text(
+        "raise RuntimeError('unrelated package initializer executed')\n"
+    )
+    dagmm.joinpath("dagmm.py").write_text("class DAGMM: pass\n")
+
+    loaded = tab_dagmm._load_dagmm(package_root)
+
+    assert loaded.__name__ == "DAGMM"
 
 
 @pytest.mark.parametrize("adapter", ADAPTERS, ids=lambda module: module.METHOD_ID)

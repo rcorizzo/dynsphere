@@ -39,6 +39,7 @@ class ImplementationSpec:
     default_hyperparameters: Mapping[str, object]
     fallback_ids: tuple[str, ...]
     runtime_requirements: tuple[str, ...] = ()
+    install_upstream_requirements: bool = True
 
 
 def resolve_local_revision(repo: Path) -> str:
@@ -98,6 +99,7 @@ def _parse_entry(raw: object, repo_root: Path | None) -> ImplementationSpec:
     hyperparameters = raw["default_hyperparameters"]
     fallbacks = raw["fallback_ids"]
     runtime_requirements = raw.get("runtime_requirements", [])
+    install_upstream_requirements = raw.get("install_upstream_requirements", True)
     string_fields = (
         "method_id",
         "display_name",
@@ -115,6 +117,8 @@ def _parse_entry(raw: object, repo_root: Path | None) -> ImplementationSpec:
         isinstance(value, str) and value for value in runtime_requirements
     ):
         raise ValueError("runtime_requirements must be a list of nonempty requirement strings")
+    if not isinstance(install_upstream_requirements, bool):
+        raise ValueError("install_upstream_requirements must be boolean")
 
     return ImplementationSpec(
         method_id=raw["method_id"],
@@ -128,6 +132,7 @@ def _parse_entry(raw: object, repo_root: Path | None) -> ImplementationSpec:
         default_hyperparameters=dict(hyperparameters),
         fallback_ids=tuple(fallbacks),
         runtime_requirements=tuple(runtime_requirements),
+        install_upstream_requirements=install_upstream_requirements,
     )
 
 
@@ -179,6 +184,7 @@ def run_identity(
         "method_id": implementation.method_id,
         "revision": implementation.revision,
         "runtime_requirements": list(implementation.runtime_requirements),
+        "install_upstream_requirements": implementation.install_upstream_requirements,
         "hyperparameters": dict(hyperparameters),
         "seed": seed,
         "data_digest": data_digest,

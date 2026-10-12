@@ -172,6 +172,7 @@ def run_external(
     environment.update(
         {
             "PYTHONHASHSEED": str(seed),
+            "PYTHONDONTWRITEBYTECODE": "1",
             "CUBLAS_WORKSPACE_CONFIG": ":4096:8",
             "OMP_NUM_THREADS": environment.get("OMP_NUM_THREADS", "1"),
             "DGLBACKEND": "pytorch",

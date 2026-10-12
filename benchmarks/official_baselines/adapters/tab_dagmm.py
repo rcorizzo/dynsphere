@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 import sys
+import types
 from pathlib import Path
 from typing import Mapping
 
@@ -20,6 +22,24 @@ from benchmarks.official_baselines.adapters.common import (
 METHOD_ID = "dagmm"
 
 
+def _load_dagmm(package_root: Path):
+    tods_root = package_root / "tods"
+    packages = {
+        "tods": tods_root,
+        "tods.detection_algorithm": tods_root / "detection_algorithm",
+        "tods.detection_algorithm.core": tods_root / "detection_algorithm" / "core",
+        "tods.detection_algorithm.core.dagmm": tods_root
+        / "detection_algorithm"
+        / "core"
+        / "dagmm",
+    }
+    for name, path in packages.items():
+        module = types.ModuleType(name)
+        module.__path__ = [str(path)]
+        sys.modules[name] = module
+    return importlib.import_module("tods.detection_algorithm.core.dagmm.dagmm").DAGMM
+
+
 def official_backend(
     train: np.ndarray, test: np.ndarray, configuration: Mapping[str, object], seed: int
 ) -> BackendOutput:
@@ -27,11 +47,7 @@ def official_backend(
         raise RuntimeError("The requested DAGMM fallback requires its dedicated environment")
     source = source_directory(METHOD_ID)
     package_root = source / "ts_benchmark" / "baselines" / "tods" / "third_party"
-    sys.path.insert(0, str(package_root))
-    try:
-        from tods.detection_algorithm.core.dagmm.dagmm import DAGMM
-    finally:
-        sys.path.pop(0)
+    DAGMM = _load_dagmm(package_root)
     model = DAGMM(
         epoch_size=int(configuration.get("epochs", 10)),
         minibatch_size=int(configuration.get("batch_size", 128)),
@@ -60,4 +76,3 @@ def run_adapter(
 
 if __name__ == "__main__":
     adapter_main(METHOD_ID, official_backend)
-

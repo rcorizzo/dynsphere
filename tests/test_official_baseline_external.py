@@ -64,6 +64,7 @@ def test_fake_adapter_receives_only_public_input_and_returns_scores(tmp_path: Pa
     )
     assert received["files"] == ["metadata.json", "test.npy", "train.npy"]
     assert received["environment"]["DGLBACKEND"] == "pytorch"
+    assert received["environment"]["PYTHONDONTWRITEBYTECODE"] == "1"
     for name in ("DGLDEFAULTDIR", "MPLCONFIGDIR", "XDG_CACHE_HOME"):
         assert Path(received["environment"][name]).is_relative_to(tmp_path / "output")
     serialized = json.dumps(received).lower()

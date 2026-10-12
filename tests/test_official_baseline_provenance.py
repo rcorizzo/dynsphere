@@ -103,6 +103,16 @@ def test_catch_uses_fixed_batch_size_valid_for_declared_training_prefixes() -> N
 def test_adapter_runtime_constraints_are_part_of_provenance() -> None:
     specs = load_registry(REGISTRY)
 
+    assert specs["dagmm"].python == "3.9"
+    assert specs["dagmm"].install_upstream_requirements is False
+    assert specs["dagmm"].fallback_ids == ()
+    assert specs["dagmm"].runtime_requirements == (
+        "tensorflow==2.13.1",
+        "numpy==1.24.3",
+        "scikit-learn==1.3.2",
+        "joblib",
+        "pyod",
+    )
     assert specs["anomaly_transformer"].runtime_requirements == (
         "torch==2.4.1",
         "numpy==1.24.4",
@@ -138,6 +148,7 @@ def test_run_identity_changes_for_every_reproducibility_input() -> None:
     alternatives = [
         {"implementation": replace(base_spec, revision="b" * 40)},
         {"implementation": replace(base_spec, runtime_requirements=("torch==1.0",))},
+        {"implementation": replace(base_spec, install_upstream_requirements=False)},
         {"hyperparameters": {"window": 32}},
         {"seed": 38},
         {"data_digest": "data-b"},

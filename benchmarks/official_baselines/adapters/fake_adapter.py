@@ -28,7 +28,13 @@ def main() -> None:
         "configuration": json.loads(args.config_json.read_text(encoding="utf-8")),
         "environment": {
             name: os.environ.get(name, "")
-            for name in ("DGLBACKEND", "DGLDEFAULTDIR", "MPLCONFIGDIR", "XDG_CACHE_HOME")
+            for name in (
+                "DGLBACKEND",
+                "DGLDEFAULTDIR",
+                "MPLCONFIGDIR",
+                "XDG_CACHE_HOME",
+                "PYTHONDONTWRITEBYTECODE",
+            )
         },
     }
     (args.output_dir / "received.json").write_text(

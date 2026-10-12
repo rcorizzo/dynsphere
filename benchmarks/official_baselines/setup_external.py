@@ -69,6 +69,16 @@ def _environment_command(
     ]
 
 
+def _has_source_changes(porcelain: str) -> bool:
+    for line in porcelain.splitlines():
+        status = line[:2]
+        path = line[3:].strip()
+        generated_cache = "__pycache__" in Path(path).parts or path.endswith(".pyc")
+        if status != "??" or not generated_cache:
+            return True
+    return False
+
+
 def _paths(method_id: str, root: Path) -> tuple[Path, Path, Path]:
     return (
         root / ".external" / method_id,
@@ -113,7 +123,7 @@ def verify_source(method_id: str, external_root: Path) -> SetupRecord:
         return SetupRecord(status="incompatible", reason=str(exc), **base)
     if revision != spec.revision:
         return SetupRecord(status="incompatible", reason="Pinned revision does not match", **base)
-    if modified:
+    if _has_source_changes(modified):
         return SetupRecord(status="incompatible", reason="Source checkout is modified", **base)
     python = environment_dir / "bin" / "python"
     marker = environment_dir / "setup.json"
@@ -125,6 +135,8 @@ def verify_source(method_id: str, external_root: Path) -> SetupRecord:
             saved.get("revision") != spec.revision
             or saved.get("python_request") != spec.python
             or saved.get("runtime_requirements", []) != list(spec.runtime_requirements)
+            or saved.get("install_upstream_requirements", True)
+            != spec.install_upstream_requirements
         ):
             raise ValueError("Environment marker does not match provenance")
         version = _run([str(python), "--version"])
@@ -149,10 +161,12 @@ def prepare_source(method_id: str, external_root: Path) -> SetupRecord:
         if not source_dir.exists():
             source_dir.parent.mkdir(parents=True, exist_ok=True)
             _run(["git", "clone", "--no-checkout", spec.repository_url, str(source_dir)])
-        if not created and _run(["git", "status", "--porcelain"], cwd=source_dir):
+        if not created and _has_source_changes(
+            _run(["git", "status", "--porcelain"], cwd=source_dir)
+        ):
             raise RuntimeError("Source checkout is modified")
         _run(["git", "checkout", "--detach", spec.revision], cwd=source_dir)
-        if _run(["git", "status", "--porcelain"], cwd=source_dir):
+        if _has_source_changes(_run(["git", "status", "--porcelain"], cwd=source_dir)):
             raise RuntimeError("Source checkout is modified")
 
         if not re.fullmatch(r"\d+\.\d+", spec.python):
@@ -162,7 +176,7 @@ def prepare_source(method_id: str, external_root: Path) -> SetupRecord:
         _run(_environment_command(spec.python, environment_dir, current))
         python = environment_dir / "bin" / "python"
         requirements = source_dir / "requirements.txt"
-        if requirements.is_file():
+        if requirements.is_file() and spec.install_upstream_requirements:
             _run(
                 [
                     "uv",
@@ -190,6 +204,7 @@ def prepare_source(method_id: str, external_root: Path) -> SetupRecord:
             "revision": spec.revision,
             "python_request": spec.python,
             "runtime_requirements": list(spec.runtime_requirements),
+            "install_upstream_requirements": spec.install_upstream_requirements,
         }
         environment_dir.joinpath("setup.json").write_text(
             json.dumps(marker, indent=2, sort_keys=True) + "\n", encoding="utf-8"
