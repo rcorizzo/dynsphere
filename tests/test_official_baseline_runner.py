@@ -272,3 +272,41 @@ def test_execution_preserves_files_outside_versioned_result_root(
     assert Path(result["run_directory"]).is_relative_to(
         tmp_path / "results" / "official_baselines_v1"
     )
+
+
+def test_dataset_preparation_error_writes_structured_incompatible_record(
+    tmp_path: Path,
+) -> None:
+    def incompatible_loader() -> EvaluationCase:
+        raise ValueError("Declared training prefix contains anomaly labels")
+
+    selected = ExperimentJob(
+        case=CaseDescriptor(
+            case_id="TSB-AD-M/contaminated",
+            dataset_id="TSB-AD-M",
+            source_family="TAO",
+            trajectory_id="contaminated",
+            seed=37,
+            loader=incompatible_loader,
+        ),
+        implementation=local_spec(),
+        hyperparameters={"variance_retained": 0.95},
+        result_root=tmp_path / "results" / "official_baselines_v1",
+        timeout_seconds=30,
+        resume=True,
+    )
+
+    result = execute_job(selected)
+
+    assert result["status"] == "incompatible"
+    assert result["incompatibility_stage"] == "dataset_preparation"
+    assert result["case_id"] == "TSB-AD-M/contaminated"
+    assert result["source_family"] == "TAO"
+    assert result["data_digest"] == "unavailable"
+    assert result["scaling_rule"] == "unavailable"
+    assert "ValueError: Declared training prefix" in result["error"]
+    record = json.loads(
+        Path(result["run_directory"]).joinpath("run.json").read_text(encoding="utf-8")
+    )
+    assert record["schema_version"] == "official-baseline-v1"
+    assert {key: record[key] for key in result} == result

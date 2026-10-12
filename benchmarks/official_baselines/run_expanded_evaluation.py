@@ -316,7 +316,41 @@ def _resume_record(run_dir: Path, identity: str, expected_rows: int) -> dict[str
 def execute_job(job: ExperimentJob) -> dict[str, object]:
     """Execute one job and resume only an exact, validated complete identity."""
     started = time.perf_counter()
-    value = _validated_case(job)
+    try:
+        value = _validated_case(job)
+    except Exception as exc:
+        identity = run_identity(
+            job.case.case_id,
+            job.implementation,
+            job.hyperparameters,
+            job.case.seed,
+            "unavailable",
+            "unavailable",
+        )
+        run_dir = _run_directory(job, identity)
+        terminal: dict[str, object] = {
+            "run_identity": identity,
+            "case_id": job.case.case_id,
+            "dataset_id": job.case.dataset_id,
+            "source_family": job.case.source_family,
+            "trajectory_id": job.case.trajectory_id,
+            "seed": job.case.seed,
+            "method_id": job.implementation.method_id,
+            "implementation_revision": job.implementation.revision,
+            "adapter_revision": job.implementation.adapter_revision,
+            "implementation_category": job.implementation.implementation_category,
+            "hyperparameters": dict(job.hyperparameters),
+            "data_digest": "unavailable",
+            "scaling_rule": "unavailable",
+            "run_directory": str(run_dir),
+            "skipped": False,
+            "status": "incompatible",
+            "incompatibility_stage": "dataset_preparation",
+            "elapsed_seconds": time.perf_counter() - started,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        write_run_record(run_dir / "run.json", terminal)
+        return terminal
     scaling_rule = str(value.metadata.get("scaling_rule", ""))
     if not scaling_rule:
         raise ValueError("Evaluation case metadata must identify its scaling rule")
