@@ -43,16 +43,27 @@ class AggregateArtifacts:
     manuscript_ready: bool
 
 
-def _read_records(result_root: Path) -> list[tuple[Path, dict[str, object]]]:
+def _read_records(
+    result_root: Path,
+    expected_adapter_revision: str | None = None,
+) -> tuple[list[tuple[Path, dict[str, object]]], int]:
     records: list[tuple[Path, dict[str, object]]] = []
+    excluded_stale = 0
     for path in sorted((result_root / "runs").rglob("run.json")):
         try:
             record = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
-        if isinstance(record, dict) and "run_identity" in record and "method_id" in record:
-            records.append((path.parent, record))
-    return records
+        if not isinstance(record, dict) or "run_identity" not in record or "method_id" not in record:
+            continue
+        if (
+            expected_adapter_revision is not None
+            and record.get("adapter_revision") != expected_adapter_revision
+        ):
+            excluded_stale += 1
+            continue
+        records.append((path.parent, record))
+    return records, excluded_stale
 
 
 def _metric_row(
@@ -216,9 +227,10 @@ def aggregate_runs(
     output_dir: Path,
     bootstrap_seed: int = 20261011,
     bootstrap_replicates: int = 10000,
+    expected_adapter_revision: str | None = None,
 ) -> AggregateArtifacts:
     """Compute run metrics and family-balanced summaries from terminal records."""
-    records = _read_records(result_root)
+    records, excluded_stale = _read_records(result_root, expected_adapter_revision)
     if not records:
         raise ValueError(f"No experiment records found under {result_root}")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -315,6 +327,8 @@ def aggregate_runs(
         "metric_errors": metric_errors,
         "bootstrap_seed": bootstrap_seed,
         "bootstrap_replicates": bootstrap_replicates,
+        "expected_adapter_revision": expected_adapter_revision,
+        "excluded_stale_record_count": excluded_stale,
         "weighting": "trajectory mean within source family, then unweighted source-family mean",
     }
     readiness_json.write_text(

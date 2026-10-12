@@ -73,8 +73,10 @@ def write_result(
     seed: int,
     value: float,
     status: str = "complete",
+    adapter_revision: str | None = None,
 ) -> None:
-    run_dir = root / "runs" / family / trajectory / method / f"seed-{seed}" / "identity"
+    identity_suffix = adapter_revision[:8] if adapter_revision else "identity"
+    run_dir = root / "runs" / family / trajectory / method / f"seed-{seed}" / identity_suffix
     record = {
         "status": status,
         "run_identity": f"{method}-{family}-{trajectory}-{seed}",
@@ -88,6 +90,8 @@ def write_result(
         "elapsed_seconds": value + 0.5,
         "run_directory": str(run_dir),
     }
+    if adapter_revision is not None:
+        record["adapter_revision"] = adapter_revision
     write_run_record(run_dir / "run.json", record)
     if status == "complete":
         private = run_dir / "case" / "private"
@@ -196,3 +200,41 @@ def test_completion_counts_and_missing_valid_method_block_manuscript_table(
         "incompatible-method",
         "timeout-method",
     }
+
+
+def test_aggregation_can_exclude_stale_adapter_revisions(
+    tmp_path: Path, monkeypatch
+) -> None:
+    result_root = tmp_path / "results"
+    write_result(
+        result_root,
+        "method-a",
+        "Family",
+        "trajectory",
+        37,
+        1.0,
+        adapter_revision="a" * 40,
+    )
+    write_result(
+        result_root,
+        "method-a",
+        "Family",
+        "trajectory",
+        37,
+        9.0,
+        adapter_revision="b" * 40,
+    )
+    monkeypatch.setattr(aggregate, "compute_metrics", metric_stub)
+
+    artifacts = aggregate_runs(
+        result_root,
+        tmp_path / "aggregate",
+        bootstrap_replicates=100,
+        expected_adapter_revision="b" * 40,
+    )
+    per_run = pd.read_csv(artifacts.per_run_csv)
+    report = json.loads(artifacts.readiness_json.read_text(encoding="utf-8"))
+
+    assert per_run.auprc.tolist() == [9.0]
+    assert report["expected_adapter_revision"] == "b" * 40
+    assert report["excluded_stale_record_count"] == 1

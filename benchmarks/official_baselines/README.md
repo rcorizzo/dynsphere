@@ -211,10 +211,12 @@ and readiness artifacts:
 .venv/bin/python - <<'PY'
 from pathlib import Path
 from benchmarks.official_baselines.aggregate import aggregate_runs
+from benchmarks.official_baselines.provenance import resolve_local_revision
 
 artifacts = aggregate_runs(
     Path("results/official_baselines_v1"),
     Path("results/official_baselines_v1/aggregate"),
+    expected_adapter_revision=resolve_local_revision(Path.cwd()),
 )
 print(artifacts)
 PY
@@ -224,7 +226,9 @@ Aggregation first averages seeds within a trajectory, then trajectories within
 a source family, and finally gives each source family equal weight. AUPRC and
 VUS-PR are the primary metrics. A manuscript-ready LaTeX table is created only
 when every observed method has a valid run, every terminal record is complete,
-and every VUS value comes from the official backend.
+and every VUS value comes from the official backend. The adapter-revision
+filter excludes preserved smoke runs and records produced by earlier adapter
+code from the current summary.
 
 ## 10. Output Audit
 
