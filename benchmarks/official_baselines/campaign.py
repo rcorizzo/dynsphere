@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -152,7 +154,7 @@ def campaign_document(
 def write_campaign_manifest(path: Path, document: dict[str, object]) -> Path:
     """Write a manifest once and reject reuse of its path for another campaign."""
 
-    if path.exists():
+    def validate_existing() -> Path:
         try:
             existing = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
@@ -160,6 +162,27 @@ def write_campaign_manifest(path: Path, document: dict[str, object]) -> Path:
         if existing != document:
             raise ValueError(f"Existing path belongs to a different campaign: {path}")
         return path
+
+    if path.exists():
+        return validate_existing()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return path
+    serialized = json.dumps(document, indent=2, sort_keys=True) + "\n"
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        text=True,
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            handle.write(serialized)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            return validate_existing()
+        return path
+    finally:
+        temporary.unlink(missing_ok=True)
