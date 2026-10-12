@@ -79,6 +79,9 @@ def test_setup_checks_out_detached_commit_and_reuses_verified_environment(
     assert second.reused is True
     marker = json.loads(first.environment_dir.joinpath("setup.json").read_text())
     assert marker["runtime_requirements"] == []
+    marker.pop("runtime_requirements")
+    first.environment_dir.joinpath("setup.json").write_text(json.dumps(marker))
+    assert verify_source("fixture", root).status == "ready"
 
 
 def test_setup_refuses_modified_source_checkout(tmp_path: Path, monkeypatch) -> None:

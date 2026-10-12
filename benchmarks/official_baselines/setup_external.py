@@ -124,7 +124,7 @@ def verify_source(method_id: str, external_root: Path) -> SetupRecord:
         if (
             saved.get("revision") != spec.revision
             or saved.get("python_request") != spec.python
-            or saved.get("runtime_requirements") != list(spec.runtime_requirements)
+            or saved.get("runtime_requirements", []) != list(spec.runtime_requirements)
         ):
             raise ValueError("Environment marker does not match provenance")
         version = _run([str(python), "--version"])
