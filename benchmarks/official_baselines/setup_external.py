@@ -29,13 +29,19 @@ class SetupRecord:
 
 
 def _run(arguments: list[str], cwd: Path | None = None) -> str:
-    return subprocess.run(
+    completed = subprocess.run(
         arguments,
         cwd=cwd,
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
-    ).stdout.strip()
+    )
+    if completed.returncode != 0:
+        diagnostic = (completed.stderr or completed.stdout).strip()[-8000:]
+        raise RuntimeError(
+            f"Command failed with status {completed.returncode}: {arguments!r}\n{diagnostic}"
+        )
+    return completed.stdout.strip()
 
 
 def _package_inventory(python: Path) -> tuple[str, ...]:

@@ -136,6 +136,17 @@ def test_environment_command_clears_incomplete_generated_directory() -> None:
     ]
 
 
+def test_setup_command_error_retains_dependency_diagnostic() -> None:
+    with pytest.raises(RuntimeError, match="dependency-conflict-marker"):
+        setup_external._run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; print('dependency-conflict-marker', file=sys.stderr); sys.exit(2)",
+            ]
+        )
+
+
 @pytest.mark.parametrize("adapter", ADAPTERS, ids=lambda module: module.METHOD_ID)
 def test_adapters_fit_train_score_test_and_align_warmup(
     tmp_path: Path, adapter
