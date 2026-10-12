@@ -46,7 +46,7 @@
       "revision": "3647c69be5eb56649b072596cf89098e689e20c3",
       "python": "3.8",
       "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.catch"],
-      "default_hyperparameters": {"window_size": 100, "epochs": 10},
+      "default_hyperparameters": {"window_size": 100, "epochs": 10, "batch_size": 32},
       "fallback_ids": ["catch_tab"]
     },
     {
@@ -130,7 +130,7 @@
       "revision": "5a7e6f80c405eed7c4dd1390f69fbba2fd8ddcf2",
       "python": "3.8",
       "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.catch", "--backend", "tab"],
-      "default_hyperparameters": {"window_size": 100, "epochs": 10},
+      "default_hyperparameters": {"window_size": 100, "epochs": 10, "batch_size": 32},
       "fallback_ids": []
     },
     {
@@ -183,4 +183,3 @@
     }
   ]
 }
-

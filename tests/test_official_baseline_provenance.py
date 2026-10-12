@@ -94,6 +94,12 @@ def test_fallbacks_are_explicit_distinct_registry_entries() -> None:
             assert specs[fallback_id].revision != ""
 
 
+def test_catch_uses_fixed_batch_size_valid_for_declared_training_prefixes() -> None:
+    specs = load_registry(REGISTRY)
+
+    assert specs["catch"].default_hyperparameters["batch_size"] == 32
+
+
 def test_run_identity_changes_for_every_reproducibility_input() -> None:
     base_spec = ImplementationSpec(
         method_id="external_method",
