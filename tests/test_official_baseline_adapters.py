@@ -103,6 +103,22 @@ def test_setup_reports_unavailable_python_as_incompatible(tmp_path: Path, monkey
     assert record.reason
 
 
+def test_package_inventory_does_not_require_pip_module(monkeypatch) -> None:
+    calls = []
+
+    def run(arguments, cwd=None):
+        calls.append(arguments)
+        return "numpy==1.0\ntorch==2.0"
+
+    monkeypatch.setattr(setup_external, "_run", run)
+
+    packages = setup_external._package_inventory(Path("environment/bin/python"))
+
+    assert packages == ("numpy==1.0", "torch==2.0")
+    assert calls[0][:2] == ["environment/bin/python", "-c"]
+    assert "pip" not in calls[0]
+
+
 @pytest.mark.parametrize("adapter", ADAPTERS, ids=lambda module: module.METHOD_ID)
 def test_adapters_fit_train_score_test_and_align_warmup(
     tmp_path: Path, adapter

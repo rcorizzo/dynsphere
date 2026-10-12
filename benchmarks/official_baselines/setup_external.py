@@ -38,6 +38,16 @@ def _run(arguments: list[str], cwd: Path | None = None) -> str:
     ).stdout.strip()
 
 
+def _package_inventory(python: Path) -> tuple[str, ...]:
+    script = (
+        "from importlib.metadata import distributions; "
+        "rows = sorted(f\"{item.metadata['Name']}=={item.version}\" "
+        "for item in distributions() if item.metadata['Name']); "
+        "print('\\n'.join(rows))"
+    )
+    return tuple(_run([str(python), "-c", script]).splitlines())
+
+
 def _paths(method_id: str, root: Path) -> tuple[Path, Path, Path]:
     return (
         root / ".external" / method_id,
@@ -93,7 +103,7 @@ def verify_source(method_id: str, external_root: Path) -> SetupRecord:
         if saved.get("revision") != spec.revision or saved.get("python_request") != spec.python:
             raise ValueError("Environment marker does not match provenance")
         version = _run([str(python), "--version"])
-        packages = tuple(_run([str(python), "-m", "pip", "freeze"]).splitlines())
+        packages = _package_inventory(python)
     except (OSError, ValueError, json.JSONDecodeError, subprocess.CalledProcessError) as exc:
         return SetupRecord(status="incompatible", reason=str(exc), **base)
     return SetupRecord(
@@ -151,7 +161,7 @@ def prepare_source(method_id: str, external_root: Path) -> SetupRecord:
             json.dumps(marker, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         version = _run([str(python), "--version"])
-        packages = tuple(_run([str(python), "-m", "pip", "freeze"]).splitlines())
+        packages = _package_inventory(python)
         record = SetupRecord(
             method_id=method_id,
             status="ready",
