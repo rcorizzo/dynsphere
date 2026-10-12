@@ -119,6 +119,23 @@ def test_package_inventory_does_not_require_pip_module(monkeypatch) -> None:
     assert "pip" not in calls[0]
 
 
+def test_environment_command_clears_incomplete_generated_directory() -> None:
+    environment = Path("official/.envs/method")
+
+    current = setup_external._environment_command("3.9", environment, "3.9")
+    alternate = setup_external._environment_command("3.8", environment, "3.9")
+
+    assert current == [sys.executable, "-m", "venv", "--clear", str(environment)]
+    assert alternate == [
+        "uv",
+        "venv",
+        str(environment),
+        "--python",
+        "3.8",
+        "--clear",
+    ]
+
+
 @pytest.mark.parametrize("adapter", ADAPTERS, ids=lambda module: module.METHOD_ID)
 def test_adapters_fit_train_score_test_and_align_warmup(
     tmp_path: Path, adapter

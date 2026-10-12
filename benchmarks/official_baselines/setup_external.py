@@ -48,6 +48,21 @@ def _package_inventory(python: Path) -> tuple[str, ...]:
     return tuple(_run([str(python), "-c", script]).splitlines())
 
 
+def _environment_command(
+    python_request: str, environment_dir: Path, current_python: str
+) -> list[str]:
+    if python_request == current_python:
+        return [sys.executable, "-m", "venv", "--clear", str(environment_dir)]
+    return [
+        "uv",
+        "venv",
+        str(environment_dir),
+        "--python",
+        python_request,
+        "--clear",
+    ]
+
+
 def _paths(method_id: str, root: Path) -> tuple[Path, Path, Path]:
     return (
         root / ".external" / method_id,
@@ -134,10 +149,7 @@ def prepare_source(method_id: str, external_root: Path) -> SetupRecord:
             raise RuntimeError(f"Unsupported Python request: {spec.python}")
         current = f"{sys.version_info.major}.{sys.version_info.minor}"
         environment_dir.parent.mkdir(parents=True, exist_ok=True)
-        if spec.python == current:
-            _run([sys.executable, "-m", "venv", str(environment_dir)])
-        else:
-            _run(["uv", "venv", str(environment_dir), "--python", spec.python])
+        _run(_environment_command(spec.python, environment_dir, current))
         python = environment_dir / "bin" / "python"
         requirements = source_dir / "requirements.txt"
         if requirements.is_file():
