@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import numpy as np
@@ -199,6 +200,49 @@ def test_dagmm_loader_bypasses_unrelated_tods_package_initializers(tmp_path: Pat
     loaded = tab_dagmm._load_dagmm(package_root)
 
     assert loaded.__name__ == "DAGMM"
+
+
+def test_omni_fallback_uses_dedicated_tsb_ad_source(tmp_path: Path, monkeypatch) -> None:
+    observed = {}
+
+    class OmniAnomaly:
+        def __init__(self, **kwargs):
+            observed["configuration"] = kwargs
+
+        def fit(self, train):
+            observed["train"] = train.copy()
+
+        def decision_function(self, test):
+            observed["test"] = test.copy()
+            return np.arange(len(test), dtype=float)
+
+    modules = {
+        "TSB_AD": types.ModuleType("TSB_AD"),
+        "TSB_AD.models": types.ModuleType("TSB_AD.models"),
+        "TSB_AD.models.OmniAnomaly": types.ModuleType("TSB_AD.models.OmniAnomaly"),
+    }
+    modules["TSB_AD.models.OmniAnomaly"].OmniAnomaly = OmniAnomaly
+    for name, module in modules.items():
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.setattr(
+        omni_anomaly,
+        "source_directory",
+        lambda method_id: tmp_path / method_id,
+    )
+    train = np.arange(40, dtype=float).reshape(20, 2)
+    test = np.arange(24, dtype=float).reshape(12, 2)
+
+    output = omni_anomaly.official_backend(
+        train,
+        test,
+        {"implementation_backend": "tsb-ad", "window_size": 5, "epochs": 2},
+        37,
+    )
+
+    np.testing.assert_array_equal(observed["train"], train)
+    np.testing.assert_array_equal(observed["test"], test)
+    assert observed["configuration"]["epochs"] == 2
+    assert output.metadata["backend"] == "TSB-AD OmniAnomaly fallback"
 
 
 @pytest.mark.parametrize("adapter", ADAPTERS, ids=lambda module: module.METHOD_ID)
