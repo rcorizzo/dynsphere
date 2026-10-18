@@ -42,10 +42,11 @@ for method_id, spec in sorted(registry.items()):
 PY
 ```
 
-The ten primary displayed methods are PCA reconstruction, KMeans distance,
-DAGMM, CATCH, MTAD-GAT, OmniAnomaly, Anomaly Transformer, TranAD, the one-step
-Euclidean predictor, and one-regime DynSphere. Fallback implementations have
-distinct method identifiers and are never selected implicitly.
+The final comparison contains 13 methods: PCA reconstruction, KMeans distance,
+DAGMM, CATCH, MTAD-GAT, TSB-AD OmniAnomaly, Anomaly Transformer, TranAD, the
+one-step Euclidean predictor, DynSphere-S, DynSphere-E, DynSphere-S1, and
+DynSphere-E1. Fallback implementations have distinct method identifiers and
+require explicit selection.
 
 ## 3. External Source Setup
 
@@ -269,10 +270,54 @@ Inspect any profile without fitting models:
 ```
 
 Campaign-scoped aggregation excludes historical, smoke, and unrelated run
-records:
+records. It also excludes older terminal records superseded by a newer run for
+the same campaign key:
 
 ```bash
 .venv/bin/python -m benchmarks.official_baselines.aggregate_campaign \
   --campaign-manifest results/official_baselines_v1/campaigns/macbook-safe.json \
   --result-root results/official_baselines_v1
 ```
+
+## 12. Final Matched Multi-Seed Campaign
+
+The `paper-multiseed` profile evaluates seven dataset groups with seeds 37,
+38, and 39. Each method receives 63 cases per seed. The complete matrix has
+2,457 logical runs, with 189 runs for each of the 13 methods and 819 runs for
+each seed.
+
+| Method identifier | Display name | Geometry or role | Concepts |
+| --- | --- | --- | ---: |
+| `pca_reconstruction` | PCA reconstruction | reconstruction baseline | n/a |
+| `kmeans_distance` | KMeans distance | distance baseline | n/a |
+| `dagmm` | DAGMM | external baseline | n/a |
+| `catch` | CATCH | external baseline | n/a |
+| `mtad_gat` | MTAD-GAT | external baseline | n/a |
+| `omni_anomaly_tsb_ad` | OmniAnomaly, TSB-AD | external baseline | n/a |
+| `anomaly_transformer` | Anomaly Transformer | external baseline | n/a |
+| `tranad` | TranAD | external baseline | n/a |
+| `predictive_euclidean_single` | One-step Euclidean predictor | predictive control | 1 mode |
+| `dynsphere` | DynSphere-S | spherical | 4 |
+| `dynsphere_euclidean` | DynSphere-E | Euclidean | 4 |
+| `dynsphere_one_regime` | DynSphere-S1 | spherical | 1 |
+| `dynsphere_euclidean_one_regime` | DynSphere-E1 | Euclidean | 1 |
+
+Inspect the complete matrix without fitting models:
+
+```bash
+TEMP_DIRECTORY=$(mktemp -d)
+.venv/bin/python -m benchmarks.official_baselines.run_campaign \
+  --profile paper-multiseed \
+  --campaign-manifest "$TEMP_DIRECTORY/paper-multiseed.json" \
+  --result-root "$TEMP_DIRECTORY/results" \
+  --dry-run
+rm "$TEMP_DIRECTORY/paper-multiseed.json"
+rmdir "$TEMP_DIRECTORY"
+```
+
+The scheduler-specific commands, component manifests, monitoring procedures,
+selective reruns, synchronization, and final aggregation are documented in
+[HPC_EXECUTION.md](HPC_EXECUTION.md). The strict readiness report requires
+complete coverage, official VUS metrics, valid metric records, and one adapter
+revision for each method. `geometry_factorial.csv` reports `E4-S4`, `E1-S1`,
+`S4-S1`, and `E4-E1` for AUPRC and VUS-PR.

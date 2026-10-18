@@ -7,11 +7,29 @@ detection for multivariate sequences going beyond pointwise feature rarity, wher
 
 ## Repository Structure
 
-- `pendulum_detector.py`: standalone DynSphere detector.
+- `pendulum_detector.py`: standalone DynSphere-S detector and matched
+  DynSphere-E geometry variant for the two-by-two geometry and concept-count
+  analysis.
+- `manifold_dynamics_detector.py`: Strategy A detector with matched Euclidean
+  and hyperspherical conditional-dynamics variants.
+- `unified_generative_detector.py`: jointly trained causal observation,
+  switching latent-dynamics, and mode-transition likelihood.
+- `predictive_generative_detector.py`: causal next-observation mixture in which
+  latent dynamics directly parameterize the scored observation distribution.
+- `segment_predictive_detector.py`: causal multi-horizon continuity test that
+  contrasts free-running and re-anchored segment likelihoods.
+- `boundary_change_point_detector.py`: explicit continuation-versus-reset
+  likelihood ratio for candidate trajectory boundaries.
+- `semi_markov_change_point_detector.py`: label-free active-event posterior
+  that marginalizes boundary evidence over a fixed duration-survival prior.
 - `neural_baselines.py`: autoencoder, window-kNN, forecasting MLP, DeepSVDD, DynSphereAE, and DynSphere++ implementations.
 - `range_metrics.py`: AUROC/AUPRC helpers, point-adjusted F1, and VUS wrapper/fallback logic.
 - `generate_pendulum_dataset.py`: synthetic benchmark generator.
 - `run_benchmarks.py`: synthetic benchmark runner.
+- `benchmarks/audit_distribution_preservation.py`: row-wise plausibility audit
+  for distribution-preserving trajectory anomalies.
+- `benchmarks/run_strategy_a_robustness.py`: paired multi-seed noise,
+  sampling-interval, and timestamp-jitter experiments.
 - `benchmarks/run_deep_tsad_paper.py`: paper-protocol runner for the retained
   neural sequence baselines abbreviated as Omni, AT, and TranAD in the paper.
 - `benchmarks/tsb_ad_m/`: TSB-AD-M download, execution, and analysis scripts.
@@ -96,6 +114,235 @@ python3 run_benchmarks.py \
   --out results/contextual_pyod_vus_results.json
 ```
 
+## Strategy A: Conditional Manifold Dynamics
+
+The Strategy A implementation is additive: it does not replace the submitted
+DynSphere implementation or its existing result files. Its principal score is
+a single conditional predictive negative log likelihood. It avoids fusion of
+independently trained anomaly scores. The spherical and Euclidean variants
+share the PCA representation, causal displacement construction, soft modes,
+matched ridge or nonlinear local dynamics fields, residual likelihood, mode-transition model, and
+chronologically held-out normal calibration split.
+
+Generate the distribution-preserving benchmark. Every anomalous observed row
+is copied exactly from the clean sequence; only temporal order, placement, or
+mode continuity is changed:
+
+```bash
+python3 generate_pendulum_dataset.py \
+  --out-dir data/distribution_preserving \
+  --name pendulum_distribution_preserving \
+  --anomaly-profile distribution_preserving
+```
+
+Audit the marginal-plausibility claim before interpreting detector results:
+
+```bash
+python3 benchmarks/audit_distribution_preservation.py \
+  --train data/distribution_preserving/pendulum_distribution_preserving_train.csv \
+  --test data/distribution_preserving/pendulum_distribution_preserving_test.csv \
+  --out results/distribution_preserving_audit.json
+```
+
+The audit reports grouped row-only classifier performance, nearest-training-row
+performance, an RBF two-sample statistic, and per-mechanism diagnostics. A
+row-only AUROC materially above chance indicates that the corresponding anomaly
+mechanism should not be used to support a strictly contextual claim.
+
+Run the matched experimental comparison:
+
+```bash
+python3 run_benchmarks.py \
+  --train data/distribution_preserving/pendulum_distribution_preserving_train.csv \
+  --test data/distribution_preserving/pendulum_distribution_preserving_test.csv \
+  --include-manifold \
+  --include-local-manifold \
+  --include-vus \
+  --skip-legacy-dynsphere \
+  --out results/distribution_preserving_manifold.json
+```
+
+Without `--include-local-manifold`, this evaluates four controlled variants:
+
+1. spherical direction with radial dynamics;
+2. spherical direction without radius;
+3. matched Euclidean latent dynamics;
+4. spherical dynamics with one global mode.
+
+The local flag adds matched nonlinear variants. For the spherical variants,
+neighboring normal velocities are parallel-transported into the query tangent
+space before estimating the local conditional likelihood.
+
+Run the paired noise and sampling-rate study:
+
+```bash
+python3 benchmarks/run_strategy_a_robustness.py \
+  --out results/strategy_a_robustness.json \
+  --seeds 37 38 39 \
+  --scenarios baseline noise_2x noise_4x interval_2x irregular_40pct \
+  --models SphereRidge EuclideanRidge SphereLocal EuclideanLocal
+```
+
+The generator also exposes `--observation-noise-std`,
+`--sampling-interval`, and `--sampling-jitter` for individual controlled
+datasets. Timestamp jitter uses a separate deterministic random stream so that
+the remaining random generation steps stay paired by seed.
+
+The sphere should be retained as a central methodological claim only if the
+spherical variants improve consistently over the matched Euclidean model. The
+multi-mode claim likewise requires improvement over the single-mode variant.
+These comparisons should be repeated across seeds before drawing paper-level
+conclusions.
+
+The pilot and real-data findings, including negative results, are documented in
+`STRATEGY_A_IMPLEMENTATION.md`.
+
+Run the learned unified likelihood and its exact factor ablations on the
+distribution-preserving benchmark:
+
+```bash
+python3 run_benchmarks.py \
+  --train data/distribution_preserving/pendulum_distribution_preserving_train.csv \
+  --test data/distribution_preserving/pendulum_distribution_preserving_test.csv \
+  --include-unified \
+  --skip-pyod \
+  --skip-legacy-dynsphere \
+  --out results/unified_generative.json
+```
+
+`UnifiedGenerative-*-Joint` is the proposed score. The observation and
+dynamics rows are likelihood-factor ablations from the same jointly trained
+model; they do not fit or fuse auxiliary anomaly detectors.
+
+Run the successor predictive likelihood, matched geometry comparison, and
+single-mode ablation:
+
+```bash
+python3 run_benchmarks.py \
+  --train data/distribution_preserving/pendulum_distribution_preserving_train.csv \
+  --test data/distribution_preserving/pendulum_distribution_preserving_test.csv \
+  --include-predictive \
+  --skip-pyod \
+  --skip-legacy-dynsphere \
+  --out results/predictive_generative.json
+```
+
+Here dynamics are not an additive score: every mode predicts a successor latent
+state, and the shared decoder maps that state to the only scored density over
+the next observation.
+
+Run the label-free mode-identifiability gate. Both rows use the same cyclic
+normal-target contrastive objective; the four-mode row additionally activates
+mode diversity, usage, persistence, and mode-specific decoders:
+
+```bash
+python3 run_benchmarks.py \
+  --train data/distribution_preserving/pendulum_distribution_preserving_train.csv \
+  --test data/distribution_preserving/pendulum_distribution_preserving_test.csv \
+  --include-identifiable-predictive \
+  --skip-pyod \
+  --skip-legacy-dynsphere \
+  --out results/identifiable_predictive.json
+```
+
+Run the segment-continuity likelihood-ratio gate:
+
+```bash
+python3 run_benchmarks.py \
+  --train data/distribution_preserving/pendulum_distribution_preserving_train.csv \
+  --test data/distribution_preserving/pendulum_distribution_preserving_test.csv \
+  --include-segment-predictive \
+  --segment-horizons 2 4 8 16 32 \
+  --predictive-epochs 10 \
+  --skip-pyod \
+  --skip-legacy-dynsphere \
+  --out results/segment_continuity.json
+```
+
+For each horizon, the null model free-runs from the latent state immediately
+before the candidate segment. The alternative re-anchors a one-step normal
+prediction at every observed state. Their calibrated log-likelihood ratio is a
+single continuity hypothesis test; it is not a weighted ensemble or a rolling
+maximum of point anomaly scores. The seed-37 strict-benchmark result is
+documented in `STRATEGY_A_IMPLEMENTATION.md`.
+
+Add `--segment-rollout-epochs 10` to fine-tune the same model through the
+deployed rollout depths. Add `--segment-probabilistic-rollout` to propagate
+learned diagonal latent process noise with deterministic sigma points. The
+multi-step variant is available to the real-data and TSB runners as
+`segment_multistep_euclidean`; the probabilistic ablation is
+`segment_state_space_euclidean`.
+
+Run the explicit boundary/change-point gate with multi-step continuation
+training:
+
+```bash
+python3 run_benchmarks.py \
+  --train data/distribution_preserving/pendulum_distribution_preserving_train.csv \
+  --test data/distribution_preserving/pendulum_distribution_preserving_test.csv \
+  --include-boundary-change-point \
+  --segment-rollout-epochs 10 \
+  --predictive-epochs 10 \
+  --skip-pyod \
+  --skip-legacy-dynsphere \
+  --out results/boundary_change_point.json
+```
+
+The reset hypothesis uses a normal-only diagonal Gaussian mixture for the
+boundary observation and the same one-step dynamics thereafter. The method is
+available to the other runners as `boundary_change_point_euclidean`.
+
+Run the semi-Markov duration sensitivity analysis from one shared fitted model:
+
+```bash
+python3 run_benchmarks.py \
+  --train data/distribution_preserving/pendulum_distribution_preserving_train.csv \
+  --test data/distribution_preserving/pendulum_distribution_preserving_test.csv \
+  --include-semi-markov-change-point \
+  --segment-rollout-epochs 10 \
+  --predictive-epochs 10 \
+  --semi-markov-max-duration 32 \
+  --semi-markov-duration-grid 4 8 16 32 \
+  --skip-pyod \
+  --skip-legacy-dynsphere \
+  --out results/semi_markov_change_point.json
+```
+
+Anomalous duration cannot be learned from normal-only data without additional
+assumptions. The duration grid is therefore predeclared and fully reported,
+not selected using test labels.
+
+Run the retained one-step predictor on all MSL, SMAP, and SMD files under the
+filename-declared normal-prefix protocol:
+
+```bash
+python3 benchmarks/tsb_ad_m/run_tsb_ad_m.py \
+  --methods predictive_euclidean_single \
+  --fit-mode declared-prefix \
+  --limit 0 \
+  --include-sources MSL SMAP SMD \
+  --random-state 37 \
+  --out-dir results/predictive_euclidean_single_tsb_seed37_declared_prefix
+```
+
+The exceptional SMD-22 sequence has a labeled anomaly inside its declared
+prefix. Reproduce its maximal-clean-prefix run with:
+
+```bash
+python3 benchmarks/tsb_ad_m/run_tsb_ad_m.py \
+  --methods predictive_euclidean_single \
+  --fit-mode prefix \
+  --limit 0 \
+  --file-list benchmarks/tsb_ad_m/smd22_clean_prefix_file.txt \
+  --random-state 37 \
+  --out-dir results/predictive_euclidean_single_tsb_seed37_smd22_clean_prefix
+```
+
+The aggregate predictor results are 0.7098/0.1835 AUROC/AUPRC on MSL,
+0.6503/0.1599 on SMAP, and 0.8233/0.4316 on SMD. See
+`STRATEGY_A_IMPLEMENTATION.md` for the paired comparison with DynSphere and
+classical baselines.
+
 Run the retained deep time-series baselines on the contextual benchmark:
 
 ```bash
@@ -159,6 +406,24 @@ python3 benchmarks/tsb_ad_m/run_tsb_ad_m.py \
   --include-vus \
   --out-dir benchmarks/tsb_ad_m/results_msl_smap_smd_paper
 ```
+
+Run the five controlled Strategy A variants with normal-only declared training
+prefixes:
+
+```bash
+python3 benchmarks/tsb_ad_m/run_tsb_ad_m.py \
+  --methods manifold_sphere_ridge manifold_euclidean_ridge \
+    manifold_sphere_local manifold_sphere_local_no_radius \
+    manifold_euclidean_local \
+  --include-sources MSL SMAP SMD \
+  --limit 0 \
+  --fit-mode declared-prefix \
+  --out-dir results/strategy_a_tsb_seed37
+```
+
+The runner validates that each filename-declared prefix is normal. If a source
+file violates that metadata, it is reported as failed and excluded with an
+explicit record.
 
 Run AutoEncoder for the same sources:
 
@@ -237,6 +502,35 @@ The `--max-train-rows` and `--max-test-rows` arguments generate the subsampled
 versions used in the paper at run time. No derived third-party CSV needs to be
 committed.
 
+For the controlled conditional-dynamics comparison, replace the `--methods`
+list above with:
+
+```text
+manifold_sphere_ridge manifold_euclidean_ridge manifold_sphere_local
+manifold_sphere_local_no_radius manifold_euclidean_local
+```
+
+Use seeds 37, 38, and 39 as separate runs and aggregate them with
+`benchmarks/real_world_datasets/aggregate_strategy_a_results.py`.
+
+For the unified real-data gate, the corresponding method identifiers are:
+
+```text
+unified_euclidean_joint unified_euclidean_observation
+unified_euclidean_dynamics unified_sphere_joint
+unified_sphere_observation unified_sphere_dynamics
+```
+
+Within one real-dataset invocation, likelihood factors of the same geometry
+reuse one fitted model.
+
+The predictive real-data method identifiers are:
+
+```text
+predictive_euclidean predictive_sphere predictive_euclidean_single
+identifiable_euclidean identifiable_euclidean_single
+```
+
 ## Reproducibility Checklist
 
 This section is intended to make the paper artifact self-contained with respect
@@ -278,23 +572,60 @@ above in `Dataset Redistribution and Attribution`.
 - Result folders and third-party data folders are intentionally ignored by git;
   rerun the commands in this README to regenerate them.
 
+### Detector-Preserving Revision Experiments
+
+The revision keeps the standalone DynSphere calculation fixed and adds an exact
+score decomposition, normal-prefix evaluation, paired component ablations,
+mechanism-specific cases, sensitivity checks, and noise/sampling stress tests.
+The main complete-source command is:
+
+```bash
+uv run --with-requirements requirements.txt python \
+  benchmarks/tsb_ad_m/run_dynsphere_revision.py \
+  --out-dir results/dynsphere_revision_tsb_multiseed \
+  --experiments ablation components \
+  --seeds 37 38 39 --include-sources MSL SMAP SMD --resume
+```
+
+Analyze the file-paired results with:
+
+```bash
+uv run --with-requirements requirements.txt python \
+  benchmarks/tsb_ad_m/analyze_dynsphere_revision.py \
+  --results results/dynsphere_revision_tsb_multiseed/results.csv \
+  --component-metrics results/dynsphere_revision_tsb_multiseed/component_metrics.csv \
+  --component-correlations results/dynsphere_revision_tsb_multiseed/component_correlations.csv \
+  --out-dir results/dynsphere_revision_tsb_multiseed/analysis
+```
+
+The predeclared robustness and sensitivity matrix is produced by replacing
+`ablation components` with `sensitivity robustness`. Mechanism-level component
+attribution for a labeled train/test pair is provided by
+`benchmarks/analyze_dynsphere_components.py`. Single-source real-world runs can
+retain paired score vectors with `run_real_world_datasets.py --scores-out ...`;
+`benchmarks/real_world_datasets/analyze_dynsphere_ablation.py` then applies a
+circular moving-block bootstrap.
+
 ### Metrics
 
-The paper reports:
+The revision reports:
 
+- `AUPRC`: primary point-wise ranking metric for rare anomalies.
 - `AUROC`: threshold-free point-wise ROC area.
+- `VUS-PR`: primary range-aware precision-recall metric when the optional
+  official VUS implementation is available.
 - `VUS-ROC`: official VUS ROC metric when the `vus` package is available; the
   sliding-window parameter is set to the median labeled anomaly length unless
   explicitly overridden.
 - `pAUC@FPR<=5%`: standardized partial AUROC over the low-false-positive
   operating region. This is reported as a supplementary real-world diagnostic.
 
-The code also computes `AUPRC`, `VUS-PR`, point-adjusted F1, and fixed-budget
-event metrics for diagnostics, but these are not the main paper metrics.
+The code also computes point-adjusted F1, standardized partial AUROC, and
+fixed-budget event metrics as diagnostics.
 
 ### Hyperparameters and Runs
 
-Hyperparameters are fixed rather than tuned on test labels.
+Hyperparameters are fixed in advance, and test labels are excluded from tuning.
 
 | Component | Setting used in paper |
 | --- | --- |
@@ -310,7 +641,12 @@ shown. MSL, SMAP, and SMD aggregate all completed complete-source file
 executions belonging to each source family; the dispersion reported in the paper
 summarizes the corresponding execution set, not seed-only variation per file.
 
-### Paper Result Tables
+### Original-Submission Result Tables (Historical)
+
+The following tables reproduce the rejected submission and are retained for
+auditability. In particular, its MSL/SMAP/SMD numbers use the earlier
+transductive protocol and must not be mixed with the normal-prefix revision
+results generated by the commands above.
 
 Contextual benchmark, mean over the paper runs:
 
@@ -385,3 +721,37 @@ Empirical runtime table from the paper, wall-clock seconds on CPU:
 
 All timings were measured on CPU using a MacBook Pro with an Apple M1 Max
 processor and 64 GB of RAM. Exact energy cost was not measured.
+
+## Final Matched Geometry Campaign
+
+The revised detector family uses one shared training and scoring structure:
+
+1. DynSphere-S uses spherical geometry with four concepts.
+2. DynSphere-E uses Euclidean geometry with four concepts.
+3. DynSphere-S1 uses spherical geometry with one concept.
+4. DynSphere-E1 uses Euclidean geometry with one concept.
+
+The one-step Euclidean predictor remains a separate predictive control. The
+`paper-multiseed` profile evaluates these five configurations together with
+PCA reconstruction, KMeans distance, DAGMM, CATCH, MTAD-GAT, TSB-AD
+OmniAnomaly, Anomaly Transformer, and TranAD. The campaign spans seven dataset
+groups, three seeds, 63 cases per method and seed, and 2,457 logical runs.
+
+```bash
+TEMP_DIRECTORY=$(mktemp -d)
+.venv/bin/python -m benchmarks.official_baselines.run_campaign \
+  --profile paper-multiseed \
+  --campaign-manifest "$TEMP_DIRECTORY/paper-multiseed.json" \
+  --result-root "$TEMP_DIRECTORY/results" \
+  --dry-run
+rm "$TEMP_DIRECTORY/paper-multiseed.json"
+rmdir "$TEMP_DIRECTORY"
+```
+
+AU and PLGrid execution is divided into H100, external-CPU, and local-CPU
+component manifests. See
+[the official-baseline execution guide](benchmarks/official_baselines/HPC_EXECUTION.md)
+for exact submission, recovery, synchronization, and aggregation commands.
+Final aggregation adds `geometry_factorial.csv` and withholds the manuscript
+table when coverage, metric validity, VUS provenance, or adapter-revision
+consistency remains incomplete.
