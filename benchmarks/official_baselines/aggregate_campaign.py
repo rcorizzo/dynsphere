@@ -1,4 +1,4 @@
-"""Aggregate only the terminal records declared by one campaign manifest."""
+"""Aggregate one campaign into readiness, summary, and factorial artifacts."""
 
 from __future__ import annotations
 

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from itertools import combinations
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -37,6 +37,27 @@ CAMPAIGN_KEY_FIELDS = (
     "method_id",
     "adapter_revision",
 )
+PAPER_METHODS = (
+    "pca_reconstruction",
+    "kmeans_distance",
+    "dagmm",
+    "catch",
+    "mtad_gat",
+    "omni_anomaly_tsb_ad",
+    "anomaly_transformer",
+    "tranad",
+    "predictive_euclidean_single",
+    "dynsphere",
+    "dynsphere_euclidean",
+    "dynsphere_one_regime",
+    "dynsphere_euclidean_one_regime",
+)
+FACTORIAL_CONTRASTS = (
+    ("E4-S4", "dynsphere_euclidean", "dynsphere"),
+    ("E1-S1", "dynsphere_euclidean_one_regime", "dynsphere_one_regime"),
+    ("S4-S1", "dynsphere", "dynsphere_one_regime"),
+    ("E4-E1", "dynsphere_euclidean", "dynsphere_euclidean_one_regime"),
+)
 
 
 @dataclass(frozen=True)
@@ -46,6 +67,7 @@ class AggregateArtifacts:
     family_csv: Path
     family_macro_csv: Path
     paired_csv: Path
+    geometry_factorial_csv: Path
     completion_csv: Path
     readiness_json: Path
     manuscript_table_tex: Path | None
@@ -56,7 +78,13 @@ def _read_records(
     result_root: Path,
     expected_adapter_revision: str | None = None,
     campaign_manifest: Path | None = None,
-) -> tuple[list[tuple[Path, dict[str, object]]], int, int, str | None]:
+) -> tuple[
+    list[tuple[Path, dict[str, object]]],
+    int,
+    int,
+    str | None,
+    set[tuple[object, ...]] | None,
+]:
     records: list[tuple[Path, dict[str, object]]] = []
     excluded_stale = 0
     excluded_noncampaign = 0
@@ -101,7 +129,36 @@ def _read_records(
                 excluded_noncampaign += 1
                 continue
         records.append((path.parent, record))
-    return records, excluded_stale, excluded_noncampaign, campaign_id
+    return records, excluded_stale, excluded_noncampaign, campaign_id, expected_jobs
+
+
+def _exclude_superseded_records(
+    records: list[tuple[Path, dict[str, object]]],
+) -> tuple[list[tuple[Path, dict[str, object]]], int]:
+    """Retain the newest terminal record for each campaign job key."""
+    selected: dict[tuple[object, ...], tuple[Path, dict[str, object]]] = {}
+    for run_dir, record in records:
+        key = tuple(record.get(field) for field in CAMPAIGN_KEY_FIELDS)
+        current = selected.get(key)
+        if current is None:
+            selected[key] = (run_dir, record)
+            continue
+        current_path, current_record = current
+        candidate_order = (
+            run_dir.joinpath("run.json").stat().st_mtime_ns,
+            str(record.get("run_identity", "")),
+        )
+        current_order = (
+            current_path.joinpath("run.json").stat().st_mtime_ns,
+            str(current_record.get("run_identity", "")),
+        )
+        if candidate_order > current_order:
+            selected[key] = (run_dir, record)
+    ordered = sorted(
+        selected.values(),
+        key=lambda item: tuple(str(item[1].get(field, "")) for field in CAMPAIGN_KEY_FIELDS),
+    )
+    return ordered, len(records) - len(ordered)
 
 
 def _metric_row(
@@ -175,6 +232,7 @@ def _paired_table(
     records: list[tuple[Path, dict[str, object]]],
     bootstrap_seed: int,
     bootstrap_replicates: int,
+    method_pairs: Sequence[tuple[str, str]] | None = None,
 ) -> pd.DataFrame:
     columns = [
         "method_a",
@@ -195,7 +253,8 @@ def _paired_table(
         expected[str(record["method_id"])].add(key)
     rows: list[dict[str, object]] = []
     rng = np.random.default_rng(bootstrap_seed)
-    for method_a, method_b in combinations(methods, 2):
+    pairs = tuple(method_pairs) if method_pairs is not None else tuple(combinations(methods, 2))
+    for method_a, method_b in pairs:
         left = per_run[per_run.method_id == method_a]
         right = per_run[per_run.method_id == method_b]
         for metric in PRIMARY_METRICS:
@@ -208,7 +267,9 @@ def _paired_table(
                 tuple(row[name] for name in PAIR_KEYS)
                 for row in paired.to_dict(orient="records")
             }
-            expected_union = expected[method_a].union(expected[method_b])
+            expected_union = expected.get(method_a, set()).union(
+                expected.get(method_b, set())
+            )
             incomplete = len(expected_union.difference(paired_keys))
             if len(differences) == 0:
                 rows.append(
@@ -244,6 +305,36 @@ def _paired_table(
     return pd.DataFrame(rows, columns=columns)
 
 
+def _factorial_table(
+    per_run: pd.DataFrame,
+    records: list[tuple[Path, dict[str, object]]],
+    bootstrap_seed: int,
+    bootstrap_replicates: int,
+) -> pd.DataFrame:
+    pairs = tuple((method_a, method_b) for _, method_a, method_b in FACTORIAL_CONTRASTS)
+    table = _paired_table(
+        per_run,
+        records,
+        bootstrap_seed=bootstrap_seed,
+        bootstrap_replicates=bootstrap_replicates,
+        method_pairs=pairs,
+    )
+    labels = {
+        (method_a, method_b): label
+        for label, method_a, method_b in FACTORIAL_CONTRASTS
+    }
+    table.insert(
+        0,
+        "contrast",
+        [labels[(row.method_a, row.method_b)] for row in table.itertuples()],
+    )
+    return table
+
+
+def _identity_document(key: tuple[object, ...]) -> dict[str, object]:
+    return dict(zip(CAMPAIGN_KEY_FIELDS, key))
+
+
 def _write_table(path: Path, frame: pd.DataFrame) -> None:
     metric_columns = [column for column in ("auprc", "vus_pr", "auroc", "vus_roc") if column in frame]
     lines = [
@@ -269,11 +360,18 @@ def aggregate_runs(
     campaign_manifest: Path | None = None,
 ) -> AggregateArtifacts:
     """Compute run metrics and family-balanced summaries from terminal records."""
-    records, excluded_stale, excluded_noncampaign, campaign_id = _read_records(
+    (
+        records,
+        excluded_stale,
+        excluded_noncampaign,
+        campaign_id,
+        expected_jobs,
+    ) = _read_records(
         result_root,
         expected_adapter_revision,
         campaign_manifest,
     )
+    records, excluded_superseded = _exclude_superseded_records(records)
     if not records:
         raise ValueError(f"No experiment records found under {result_root}")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -329,12 +427,19 @@ def aggregate_runs(
         bootstrap_seed=bootstrap_seed,
         bootstrap_replicates=bootstrap_replicates,
     )
+    factorial = _factorial_table(
+        per_run,
+        records,
+        bootstrap_seed=bootstrap_seed,
+        bootstrap_replicates=bootstrap_replicates,
+    )
 
     per_run_csv = output_dir / "per_run.csv"
     trajectory_csv = output_dir / "per_trajectory.csv"
     family_csv = output_dir / "per_family.csv"
     family_macro_csv = output_dir / "family_macro.csv"
     paired_csv = output_dir / "paired.csv"
+    geometry_factorial_csv = output_dir / "geometry_factorial.csv"
     completion_csv = output_dir / "completion.csv"
     readiness_json = output_dir / "readiness.json"
     per_run.to_csv(per_run_csv, index=False)
@@ -342,32 +447,88 @@ def aggregate_runs(
     family.to_csv(family_csv, index=False)
     family_macro.to_csv(family_macro_csv, index=False)
     paired.to_csv(paired_csv, index=False)
+    factorial.to_csv(geometry_factorial_csv, index=False)
     completion_frame.to_csv(completion_csv, index=False)
 
     observed_methods = sorted({str(record["method_id"]) for _, record in records})
+    expected_methods = sorted(PAPER_METHODS)
+    missing_methods = sorted(set(expected_methods).difference(observed_methods))
+    unexpected_methods = sorted(set(observed_methods).difference(expected_methods))
     valid_methods = set(per_run.method_id.astype(str))
     methods_without_valid = sorted(set(observed_methods).difference(valid_methods))
-    fallback_vus_runs = (
-        per_run.loc[per_run.vus_backend != "official_vus", "run_identity"].astype(str).tolist()
-        if "vus_backend" in per_run
+    metric_warnings = []
+    if "vus_backend" in per_run:
+        metric_warnings = [
+            {
+                "run_identity": str(row.run_identity),
+                "warning": f"vus_backend={row.vus_backend}",
+            }
+            for row in per_run.loc[
+                per_run.vus_backend != "official_vus",
+                ["run_identity", "vus_backend"],
+            ].itertuples(index=False)
+        ]
+    fallback_vus_runs = [warning["run_identity"] for warning in metric_warnings]
+    observed_job_keys = {
+        tuple(record.get(field) for field in CAMPAIGN_KEY_FIELDS)
+        for _, record in records
+    }
+    missing_run_keys = (
+        sorted(expected_jobs.difference(observed_job_keys), key=lambda row: tuple(map(str, row)))
+        if expected_jobs is not None
         else []
+    )
+    missing_run_identities = [_identity_document(key) for key in missing_run_keys]
+    noncomplete_identities = [
+        {
+            **_identity_document(
+                tuple(record.get(field) for field in CAMPAIGN_KEY_FIELDS)
+            ),
+            "run_identity": str(record.get("run_identity", "unknown")),
+            "status": str(record.get("status", "unknown")),
+        }
+        for _, record in records
+        if record.get("status") != "complete"
+    ]
+    revisions: defaultdict[str, set[str]] = defaultdict(set)
+    revision_sources = expected_jobs if expected_jobs is not None else observed_job_keys
+    for key in revision_sources:
+        method_id = str(key[CAMPAIGN_KEY_FIELDS.index("method_id")])
+        revision = str(key[CAMPAIGN_KEY_FIELDS.index("adapter_revision")])
+        revisions[method_id].add(revision)
+    adapter_revisions_by_method = {
+        method: sorted(values) for method, values in sorted(revisions.items())
+    }
+    methods_with_multiple_adapter_revisions = sorted(
+        method for method, values in revisions.items() if len(values) > 1
     )
     noncomplete = int(sum(count for status, count in completion.items() if status != "complete"))
     manuscript_ready = bool(
-        observed_methods
+        not missing_methods
+        and not missing_run_identities
         and not methods_without_valid
         and not fallback_vus_runs
         and not metric_errors
+        and not methods_with_multiple_adapter_revisions
         and noncomplete == 0
     )
     readiness = {
         "manuscript_ready": manuscript_ready,
+        "expected_methods": expected_methods,
         "observed_methods": observed_methods,
+        "missing_methods": missing_methods,
+        "unexpected_methods": unexpected_methods,
         "methods_without_valid_runs": methods_without_valid,
+        "missing_run_identities": missing_run_identities,
+        "noncomplete_identities": noncomplete_identities,
         "noncomplete_run_count": noncomplete,
         "fallback_vus_run_count": len(fallback_vus_runs),
         "fallback_vus_runs": fallback_vus_runs,
+        "metric_warnings": metric_warnings,
         "metric_errors": metric_errors,
+        "adapter_revisions_by_method": adapter_revisions_by_method,
+        "methods_with_multiple_adapter_revisions": methods_with_multiple_adapter_revisions,
+        "geometry_factorial_csv": str(geometry_factorial_csv),
         "bootstrap_seed": bootstrap_seed,
         "bootstrap_replicates": bootstrap_replicates,
         "expected_adapter_revision": expected_adapter_revision,
@@ -375,6 +536,8 @@ def aggregate_runs(
         "campaign_id": campaign_id,
         "campaign_manifest": str(campaign_manifest) if campaign_manifest is not None else None,
         "excluded_noncampaign_record_count": excluded_noncampaign,
+        "excluded_superseded_record_count": excluded_superseded,
+        "superseded_record_selection": "newest-run-record-mtime-with-identity-tiebreak",
         "weighting": "trajectory mean within source family, then unweighted source-family mean",
     }
     readiness_json.write_text(
@@ -390,6 +553,7 @@ def aggregate_runs(
         family_csv=family_csv,
         family_macro_csv=family_macro_csv,
         paired_csv=paired_csv,
+        geometry_factorial_csv=geometry_factorial_csv,
         completion_csv=completion_csv,
         readiness_json=readiness_json,
         manuscript_table_tex=manuscript_table,
