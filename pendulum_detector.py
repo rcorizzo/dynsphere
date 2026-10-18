@@ -385,6 +385,8 @@ class _GeometryAwareDynSphereDetector(BaseEstimator):
 class MultiConceptPendulumDetector(_GeometryAwareDynSphereDetector):
     """Spherical multi-regime dynamic detector."""
 
+    geometry = "spherical"
+
     def __init__(
         self,
         n_concepts: int = 4,
@@ -416,3 +418,66 @@ class MultiConceptPendulumDetector(_GeometryAwareDynSphereDetector):
             cluster_weight=cluster_weight,
             propagation_radius=propagation_radius,
         )
+
+
+class MultiConceptEuclideanDetector(_GeometryAwareDynSphereDetector):
+    """Euclidean multi-regime detector matched to DynSphere-S."""
+
+    geometry = "euclidean"
+    position_component_name = "position"
+    latent_dynamics_component_name = "euclidean_dynamics"
+
+    def __init__(
+        self,
+        n_concepts: int = 4,
+        latent_dim: int = 5,
+        ridge_alpha: float = 1.0,
+        transition_smoothing: float = 0.5,
+        random_state: int = 37,
+        position_weight: float = 1.0,
+        dynamic_weight: float = 1.8,
+        energy_weight: float = 1.0,
+        velocity_weight: float = 0.8,
+        transition_weight: float = 0.8,
+        raw_dynamic_weight: float = 1.4,
+        cluster_weight: float = 0.15,
+        propagation_radius: int = 8,
+    ) -> None:
+        self.position_weight = position_weight
+        super().__init__(
+            n_concepts=n_concepts,
+            latent_dim=latent_dim,
+            ridge_alpha=ridge_alpha,
+            transition_smoothing=transition_smoothing,
+            random_state=random_state,
+            angular_weight=position_weight,
+            dynamic_weight=dynamic_weight,
+            energy_weight=energy_weight,
+            velocity_weight=velocity_weight,
+            transition_weight=transition_weight,
+            raw_dynamic_weight=raw_dynamic_weight,
+            cluster_weight=cluster_weight,
+            propagation_radius=propagation_radius,
+        )
+
+    def _latent_state(self, latent: np.ndarray) -> np.ndarray:
+        return latent
+
+    def _latent_derivatives(
+        self,
+        state: np.ndarray,
+        entity_ids: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        return _euclidean_sequence_derivatives(state, entity_ids)
+
+    def _equilibrium(self, state: np.ndarray) -> np.ndarray:
+        return np.mean(state, axis=0)
+
+    def _concept_center(self, state: np.ndarray) -> np.ndarray:
+        return np.mean(state, axis=0)
+
+    def _position_distance(self, state: np.ndarray, center: np.ndarray) -> np.ndarray:
+        return np.linalg.norm(state - center, axis=1)
+
+    def _potential(self, state: np.ndarray, equilibrium: np.ndarray) -> np.ndarray:
+        return 0.5 * np.sum((state - equilibrium) ** 2, axis=1)

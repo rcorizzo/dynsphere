@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from pendulum_detector import MultiConceptPendulumDetector
+from pendulum_detector import MultiConceptEuclideanDetector, MultiConceptPendulumDetector
 
 
 SPHERICAL_SNAPSHOT = (
@@ -82,6 +82,110 @@ class DynSphereComponentTests(unittest.TestCase):
         components = model.decision_components(x, entities)
         for name, values in components.items():
             self.assertTrue(np.all(np.isfinite(values)), name)
+
+    def test_euclidean_geometry_definitions(self) -> None:
+        detector = MultiConceptEuclideanDetector(propagation_radius=0)
+        latent = np.array([[1.0, 2.0], [3.0, 5.0], [6.0, 9.0]])
+        entities = np.zeros(3, dtype=int)
+        np.testing.assert_array_equal(detector._latent_state(latent), latent)
+        velocity, acceleration = detector._latent_derivatives(latent, entities)
+        expected_velocity = np.gradient(latent, axis=0)
+        np.testing.assert_allclose(velocity, expected_velocity)
+        np.testing.assert_allclose(acceleration, np.gradient(expected_velocity, axis=0))
+        center = detector._concept_center(latent)
+        np.testing.assert_allclose(center, np.mean(latent, axis=0))
+        np.testing.assert_allclose(
+            detector._position_distance(latent, center),
+            np.linalg.norm(latent - center, axis=1),
+        )
+        equilibrium = np.array([2.0, 4.0])
+        np.testing.assert_allclose(
+            detector._potential(latent, equilibrium),
+            0.5 * np.sum((latent - equilibrium) ** 2, axis=1),
+        )
+
+    def test_common_behavior_for_both_geometries(self) -> None:
+        x, _ = self.sequence(rows=60)
+        entities = np.repeat([0, 1], 30)
+        for detector_type, position_name, dynamics_name in (
+            (MultiConceptPendulumDetector, "angular", "spherical_dynamics"),
+            (MultiConceptEuclideanDetector, "position", "euclidean_dynamics"),
+        ):
+            with self.subTest(detector=detector_type.__name__):
+                model = detector_type(
+                    n_concepts=1,
+                    latent_dim=3,
+                    propagation_radius=0,
+                    random_state=37,
+                ).fit(x[:40], entities[:40])
+                components = model.decision_components(x, entities)
+                additive_names = (
+                    position_name,
+                    dynamics_name,
+                    "raw_dynamics",
+                    "state_speed",
+                    "velocity",
+                    "regime_distance",
+                    "transition",
+                )
+                reconstructed = sum(components[name] for name in additive_names)
+                np.testing.assert_allclose(
+                    reconstructed,
+                    components["pre_propagation_score"],
+                )
+                self.assertEqual(components["score"].shape, (len(x),))
+                self.assertTrue(np.all(np.isfinite(components["score"])))
+                np.testing.assert_allclose(components["transition"], 0.0)
+                self.assertEqual(components["transition"][30], 0.0)
+
+                state = model._latent_state(
+                    model.pca_.transform(model.feature_scaler_.transform(x))
+                )
+                velocity, acceleration = model._latent_derivatives(state, entities)
+                isolated_velocity, isolated_acceleration = model._latent_derivatives(
+                    state[30:],
+                    np.zeros(30, dtype=int),
+                )
+                np.testing.assert_allclose(velocity[30:], isolated_velocity)
+                np.testing.assert_allclose(acceleration[30:], isolated_acceleration)
+
+    def test_small_concepts_use_all_training_fallback(self) -> None:
+        x, entities = self.sequence(rows=8)
+        for detector_type in (MultiConceptPendulumDetector, MultiConceptEuclideanDetector):
+            with self.subTest(detector=detector_type.__name__):
+                model = detector_type(
+                    n_concepts=4,
+                    latent_dim=2,
+                    propagation_radius=0,
+                    random_state=37,
+                ).fit(x, entities)
+                scores = model.decision_function(x, entities)
+                self.assertTrue(np.all(np.isfinite(scores)))
+                for fitted in model.models_[1:]:
+                    np.testing.assert_allclose(fitted.coef_, model.models_[0].coef_)
+                for fitted in model.raw_models_[1:]:
+                    np.testing.assert_allclose(fitted.coef_, model.raw_models_[0].coef_)
+
+    def test_latent_magnitude_is_visible_only_in_euclidean_geometry(self) -> None:
+        spherical = MultiConceptPendulumDetector()
+        euclidean = MultiConceptEuclideanDetector()
+        latent = np.array([[1.0, 2.0, -1.0]])
+        scaled = 3.5 * latent
+        np.testing.assert_allclose(
+            spherical._latent_state(latent),
+            spherical._latent_state(scaled),
+        )
+        self.assertFalse(
+            np.allclose(
+                euclidean._latent_state(latent),
+                euclidean._latent_state(scaled),
+            )
+        )
+        equilibrium = np.zeros(3)
+        self.assertNotEqual(
+            float(euclidean._potential(latent, equilibrium)[0]),
+            float(euclidean._potential(scaled, equilibrium)[0]),
+        )
 
     def test_propagation_is_reported_separately(self) -> None:
         x, entities = self.sequence()
