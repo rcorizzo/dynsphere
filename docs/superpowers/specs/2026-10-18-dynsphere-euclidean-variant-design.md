@@ -149,10 +149,12 @@ implementation revision.
 
 ## 6. Experiment campaigns
 
-### 6.1 DynSphere geometry campaign
+### 6.1 Umbrella campaign
 
-The geometry campaign will evaluate the four DynSphere configurations and the
-one-step Euclidean predictor on:
+The final campaign will evaluate the four DynSphere configurations, the
+one-step Euclidean predictor, PCA reconstruction, KMeans distance, DAGMM,
+CATCH, MTAD-GAT, the declared TSB-AD OmniAnomaly implementation, Anomaly
+Transformer, and TranAD on:
 
 1. DynSphere-Contextual;
 2. MSL;
@@ -162,17 +164,24 @@ one-step Euclidean predictor on:
 6. HAI-20.07; and
 7. PowerSystem.
 
-Seeds 37, 38, and 39 will be used. The campaign contains 945 logical runs
-before resumable reuse: 63 cases, five methods, and three seeds. It will use a
-dedicated manifest and CPU scheduler array. Existing result directories will
-be preserved.
+Seeds 37, 38, and 39 will be used. The umbrella campaign contains 2,457
+logical runs: 63 cases, 13 methods, and three seeds. A clean campaign snapshot
+will rerun every included method under one repository revision. This avoids
+mixing adapter revisions across seeds while preserving all historical result
+directories.
 
-### 6.2 Official-baseline follow-up
+### 6.2 Component execution
 
-The official-baseline campaign will add seeds 38 and 39 for DAGMM, CATCH,
-MTAD-GAT, the declared OmniAnomaly implementation, Anomaly Transformer, and
-TranAD on the same seven dataset groups. This campaign contains 756 logical
-runs and uses separate CPU and H100 manifests.
+Execution will be partitioned into three component manifests:
+
+1. 756 H100 runs for CATCH, MTAD-GAT, Anomaly Transformer, and TranAD;
+2. 378 external-CPU runs for DAGMM and TSB-AD OmniAnomaly; and
+3. 1,323 local-CPU runs for PCA reconstruction, KMeans distance, the one-step
+   Euclidean predictor, DynSphere-S, DynSphere-E, DynSphere-S1, and
+   DynSphere-E1.
+
+The components may execute concurrently. Separate manifests and logs will
+preserve hardware-specific provenance and allow selective resubmission.
 
 ### 6.3 Aggregation
 
