@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#BSUB -J "dynsphere-paper-cpu[1-16]"
+#BSUB -q long
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=32000]"
+#BSUB -W 72:00
+#BSUB -o logs/au-paper-cpu-%J-%I.out
+#BSUB -e logs/au-paper-cpu-%J-%I.err
+
+set -euo pipefail
+
+: "${DYNSPHERE_REPO:?Set DYNSPHERE_REPO to the repository path on Lovelace}"
+RESULT_ROOT="${DYNSPHERE_RESULT_ROOT:-$DYNSPHERE_REPO/results/official_baselines_v1}"
+export DYNSPHERE_DEVICE=cpu
+export DYNSPHERE_PROFILE=paper-multiseed
+export DYNSPHERE_SHARD_COUNT=16
+export DYNSPHERE_METHODS="dagmm omni_anomaly_tsb_ad"
+export DYNSPHERE_CAMPAIGN_MANIFEST="$RESULT_ROOT/campaigns/paper-multiseed-au-external-cpu.json"
+exec bash "$DYNSPHERE_REPO/benchmarks/official_baselines/hpc/run_au_array.sh"

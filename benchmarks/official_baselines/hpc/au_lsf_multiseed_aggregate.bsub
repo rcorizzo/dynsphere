@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#BSUB -J dynsphere-paper-aggregate
+#BSUB -q long
+#BSUB -n 2
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=8000]"
+#BSUB -W 24:00
+#BSUB -o logs/au-paper-aggregate-%J.out
+#BSUB -e logs/au-paper-aggregate-%J.err
+
+set -euo pipefail
+
+: "${DYNSPHERE_REPO:?Set DYNSPHERE_REPO to the repository path on Lovelace}"
+PYTHON_EXECUTABLE="${DYNSPHERE_PYTHON:-$DYNSPHERE_REPO/.venv/bin/python}"
+RESULT_ROOT="${DYNSPHERE_RESULT_ROOT:-$DYNSPHERE_REPO/results/official_baselines_v1}"
+MANIFEST="$RESULT_ROOT/campaigns/paper-multiseed-au-complete.json"
+CPU_MANIFEST="$RESULT_ROOT/campaigns/paper-multiseed-au-external-cpu.json"
+H100_MANIFEST="$RESULT_ROOT/campaigns/paper-multiseed-au-h100.json"
+LOCAL_MANIFEST="$RESULT_ROOT/campaigns/paper-multiseed-au-local.json"
+
+cd "$DYNSPHERE_REPO"
+"$PYTHON_EXECUTABLE" -m benchmarks.official_baselines.merge_campaign_manifests \
+  --output "$MANIFEST" \
+  "$CPU_MANIFEST" \
+  "$H100_MANIFEST" \
+  "$LOCAL_MANIFEST"
+
+exec "$PYTHON_EXECUTABLE" -m benchmarks.official_baselines.aggregate_campaign \
+  --campaign-manifest "$MANIFEST" \
+  --result-root "$RESULT_ROOT"

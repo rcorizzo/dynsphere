@@ -30,6 +30,11 @@ PYTHON_EXECUTABLE="${DYNSPHERE_PYTHON:-$DYNSPHERE_REPO/.venv/bin/python}"
 TSB_DATA_ROOT="${DYNSPHERE_TSB_DATA_ROOT:-$DYNSPHERE_REPO/benchmarks/tsb_ad_m/data/TSB-AD-M}"
 RESULT_ROOT="${DYNSPHERE_RESULT_ROOT:-$DYNSPHERE_REPO/results/official_baselines_v1}"
 CAMPAIGN_MANIFEST="${DYNSPHERE_CAMPAIGN_MANIFEST:-$RESULT_ROOT/campaigns/$PROFILE.json}"
+METHOD_ARGS=()
+if [[ -n "${DYNSPHERE_METHODS:-}" ]]; then
+  read -r -a METHODS <<< "$DYNSPHERE_METHODS"
+  METHOD_ARGS=(--methods "${METHODS[@]}")
+fi
 
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
@@ -41,6 +46,7 @@ fi
 cd "$DYNSPHERE_REPO"
 exec "$PYTHON_EXECUTABLE" -m benchmarks.official_baselines.run_campaign \
   --profile "$PROFILE" \
+  "${METHOD_ARGS[@]}" \
   --shard-index "$SHARD_INDEX" \
   --shard-count "$SHARD_COUNT" \
   --tsb-data-root "$TSB_DATA_ROOT" \
