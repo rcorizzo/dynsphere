@@ -94,6 +94,18 @@ DYNSPHERE_WEIGHTS = {
     "transition": 0.8,
     "regime_distance": 0.15,
 }
+DYNSPHERE_CONFIGURATION = {
+    "latent_dim": 5,
+    "ridge_alpha": 1.0,
+    "transition_smoothing": 0.5,
+    "dynamic_weight": DYNSPHERE_WEIGHTS["latent_dynamics"],
+    "energy_weight": DYNSPHERE_WEIGHTS["state_speed"],
+    "velocity_weight": DYNSPHERE_WEIGHTS["velocity"],
+    "transition_weight": DYNSPHERE_WEIGHTS["transition"],
+    "raw_dynamic_weight": DYNSPHERE_WEIGHTS["raw_dynamics"],
+    "cluster_weight": DYNSPHERE_WEIGHTS["regime_distance"],
+    "propagation_radius": 8,
+}
 
 
 def _score_dynsphere_family(
@@ -108,7 +120,16 @@ def _score_dynsphere_family(
     train, test = _arrays(train, test)
     train_entities = np.zeros(len(train), dtype=int)
     test_entities = np.zeros(len(test), dtype=int)
-    model = detector_type(n_concepts=n_concepts, random_state=seed)
+    configuration = {
+        **DYNSPHERE_CONFIGURATION,
+        "n_concepts": n_concepts,
+        "random_state": seed,
+    }
+    if geometry == "spherical":
+        configuration["angular_weight"] = DYNSPHERE_WEIGHTS["position"]
+    else:
+        configuration["position_weight"] = DYNSPHERE_WEIGHTS["position"]
+    model = detector_type(**configuration)
     model.fit(train, train_entities, np.arange(len(train)))
     scores = model.decision_function(test, test_entities, np.arange(len(test)))
     return _result(
@@ -117,8 +138,10 @@ def _score_dynsphere_family(
         {
             "geometry": geometry,
             "n_concepts": n_concepts,
-            "latent_dim": 5,
-            "propagation_radius": 8,
+            "latent_dim": DYNSPHERE_CONFIGURATION["latent_dim"],
+            "ridge_alpha": DYNSPHERE_CONFIGURATION["ridge_alpha"],
+            "transition_smoothing": DYNSPHERE_CONFIGURATION["transition_smoothing"],
+            "propagation_radius": DYNSPHERE_CONFIGURATION["propagation_radius"],
             "weights": dict(DYNSPHERE_WEIGHTS),
         },
     )

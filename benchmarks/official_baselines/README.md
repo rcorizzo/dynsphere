@@ -319,5 +319,5 @@ The scheduler-specific commands, component manifests, monitoring procedures,
 selective reruns, synchronization, and final aggregation are documented in
 [HPC_EXECUTION.md](HPC_EXECUTION.md). The strict readiness report requires
 complete coverage, official VUS metrics, valid metric records, and one adapter
-revision for each method. `geometry_factorial.csv` reports `E4-S4`, `E1-S1`,
+revision shared by the complete campaign. `geometry_factorial.csv` reports `E4-S4`, `E1-S1`,
 `S4-S1`, and `E4-E1` for AUPRC and VUS-PR.

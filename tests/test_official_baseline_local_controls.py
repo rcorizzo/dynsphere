@@ -91,6 +91,8 @@ def test_dynsphere_family_uses_matched_geometry_and_concept_configuration(monkey
         assert metadata["geometry"] == geometry
         assert metadata["n_concepts"] == n_concepts
         assert metadata["latent_dim"] == 5
+        assert metadata["ridge_alpha"] == 1.0
+        assert metadata["transition_smoothing"] == 0.5
         assert metadata["propagation_radius"] == 8
         assert metadata["weights"] == {
             "position": 1.0,
@@ -102,11 +104,24 @@ def test_dynsphere_family_uses_matched_geometry_and_concept_configuration(monkey
             "regime_distance": 0.15,
         }
 
+    common = {
+        "latent_dim": 5,
+        "ridge_alpha": 1.0,
+        "transition_smoothing": 0.5,
+        "dynamic_weight": 1.8,
+        "energy_weight": 1.0,
+        "velocity_weight": 0.8,
+        "transition_weight": 0.8,
+        "raw_dynamic_weight": 1.4,
+        "cluster_weight": 0.15,
+        "propagation_radius": 8,
+        "random_state": 39,
+    }
     assert observed == [
-        ("spherical", {"n_concepts": 4, "random_state": 39}),
-        ("euclidean", {"n_concepts": 4, "random_state": 39}),
-        ("spherical", {"n_concepts": 1, "random_state": 39}),
-        ("euclidean", {"n_concepts": 1, "random_state": 39}),
+        ("spherical", {**common, "n_concepts": 4, "angular_weight": 1.0}),
+        ("euclidean", {**common, "n_concepts": 4, "position_weight": 1.0}),
+        ("spherical", {**common, "n_concepts": 1, "angular_weight": 1.0}),
+        ("euclidean", {**common, "n_concepts": 1, "position_weight": 1.0}),
     ]
 
 

@@ -502,6 +502,10 @@ def aggregate_runs(
     methods_with_multiple_adapter_revisions = sorted(
         method for method, values in revisions.items() if len(values) > 1
     )
+    campaign_adapter_revisions = sorted(
+        {revision for values in revisions.values() for revision in values}
+    )
+    mixed_campaign_adapter_revisions = len(campaign_adapter_revisions) > 1
     noncomplete = int(sum(count for status, count in completion.items() if status != "complete"))
     manuscript_ready = bool(
         not missing_methods
@@ -510,6 +514,7 @@ def aggregate_runs(
         and not fallback_vus_runs
         and not metric_errors
         and not methods_with_multiple_adapter_revisions
+        and not mixed_campaign_adapter_revisions
         and noncomplete == 0
     )
     readiness = {
@@ -528,6 +533,8 @@ def aggregate_runs(
         "metric_errors": metric_errors,
         "adapter_revisions_by_method": adapter_revisions_by_method,
         "methods_with_multiple_adapter_revisions": methods_with_multiple_adapter_revisions,
+        "campaign_adapter_revisions": campaign_adapter_revisions,
+        "mixed_campaign_adapter_revisions": mixed_campaign_adapter_revisions,
         "geometry_factorial_csv": str(geometry_factorial_csv),
         "bootstrap_seed": bootstrap_seed,
         "bootstrap_replicates": bootstrap_replicates,

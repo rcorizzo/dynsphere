@@ -127,6 +127,8 @@
         "geometry": "spherical",
         "n_concepts": 4,
         "latent_dim": 5,
+        "ridge_alpha": 1.0,
+        "transition_smoothing": 0.5,
         "propagation_radius": 8,
         "weights": {"position": 1.0, "latent_dynamics": 1.8, "raw_dynamics": 1.4, "state_speed": 1.0, "velocity": 0.8, "transition": 0.8, "regime_distance": 0.15}
       },
@@ -145,6 +147,8 @@
         "geometry": "euclidean",
         "n_concepts": 4,
         "latent_dim": 5,
+        "ridge_alpha": 1.0,
+        "transition_smoothing": 0.5,
         "propagation_radius": 8,
         "weights": {"position": 1.0, "latent_dynamics": 1.8, "raw_dynamics": 1.4, "state_speed": 1.0, "velocity": 0.8, "transition": 0.8, "regime_distance": 0.15}
       },
@@ -163,6 +167,8 @@
         "geometry": "spherical",
         "n_concepts": 1,
         "latent_dim": 5,
+        "ridge_alpha": 1.0,
+        "transition_smoothing": 0.5,
         "propagation_radius": 8,
         "weights": {"position": 1.0, "latent_dynamics": 1.8, "raw_dynamics": 1.4, "state_speed": 1.0, "velocity": 0.8, "transition": 0.8, "regime_distance": 0.15}
       },
@@ -181,6 +187,8 @@
         "geometry": "euclidean",
         "n_concepts": 1,
         "latent_dim": 5,
+        "ridge_alpha": 1.0,
+        "transition_smoothing": 0.5,
         "propagation_radius": 8,
         "weights": {"position": 1.0, "latent_dynamics": 1.8, "raw_dynamics": 1.4, "state_speed": 1.0, "velocity": 0.8, "transition": 0.8, "regime_distance": 0.15}
       },

@@ -71,6 +71,8 @@ def test_registry_declares_the_matched_dynsphere_factorial() -> None:
         assert spec.default_hyperparameters["geometry"] == geometry
         assert spec.default_hyperparameters["n_concepts"] == n_concepts
         assert spec.default_hyperparameters["latent_dim"] == 5
+        assert spec.default_hyperparameters["ridge_alpha"] == 1.0
+        assert spec.default_hyperparameters["transition_smoothing"] == 0.5
         assert spec.default_hyperparameters["propagation_radius"] == 8
         assert spec.default_hyperparameters["weights"] == {
             "position": 1.0,

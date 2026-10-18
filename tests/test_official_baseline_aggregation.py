@@ -329,6 +329,36 @@ def test_readiness_identifies_missing_runs_metric_warnings_and_mixed_revisions(
     assert report["geometry_factorial_csv"] == str(artifacts.geometry_factorial_csv)
 
 
+def test_readiness_blocks_repository_revision_mix_across_methods(
+    tmp_path: Path, monkeypatch
+) -> None:
+    result_root = tmp_path / "results"
+    revision_a = "a" * 40
+    revision_b = "b" * 40
+    for index, method in enumerate(aggregate.PAPER_METHODS):
+        write_result(
+            result_root,
+            method,
+            "Family",
+            f"trajectory-{index}",
+            37,
+            float(index + 1),
+            adapter_revision=revision_b if index == 0 else revision_a,
+        )
+    monkeypatch.setattr(aggregate, "compute_metrics", metric_stub)
+
+    artifacts = aggregate_runs(
+        result_root,
+        tmp_path / "aggregate",
+        bootstrap_replicates=100,
+    )
+    report = json.loads(artifacts.readiness_json.read_text(encoding="utf-8"))
+
+    assert artifacts.manuscript_ready is False
+    assert report["campaign_adapter_revisions"] == [revision_a, revision_b]
+    assert report["mixed_campaign_adapter_revisions"] is True
+
+
 def test_completion_counts_and_missing_valid_method_block_manuscript_table(
     tmp_path: Path, monkeypatch
 ) -> None:
