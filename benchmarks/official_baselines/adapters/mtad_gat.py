@@ -12,6 +12,7 @@ from benchmarks.official_baselines.adapters.common import (
     Backend,
     BackendOutput,
     adapter_main,
+    resolve_torch_device,
     run_backend_adapter,
     source_directory,
 )
@@ -28,6 +29,7 @@ def official_backend(
     from torch.utils.data import DataLoader
 
     torch.manual_seed(seed)
+    device = resolve_torch_device(torch)
     source = source_directory(METHOD_ID)
     sys.path.insert(0, str(source))
     try:
@@ -52,12 +54,14 @@ def official_backend(
         window_size=window,
         out_dim=train.shape[1],
         use_gatv2=True,
-    )
+    ).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=float(configuration.get("lr", 1e-3)))
     criterion = nn.MSELoss()
     model.train()
     for _ in range(int(configuration.get("epochs", 10))):
         for windows, targets in train_loader:
+            windows = windows.to(device)
+            targets = targets.to(device)
             optimizer.zero_grad()
             forecast, reconstruction = model(windows)
             target = targets.squeeze(1)
@@ -68,6 +72,8 @@ def official_backend(
     values: list[np.ndarray] = []
     with torch.no_grad():
         for windows, targets in test_loader:
+            windows = windows.to(device)
+            targets = targets.to(device)
             forecast, reconstruction = model(windows)
             target = targets.squeeze(1)
             forecast_error = torch.mean((forecast - target) ** 2, dim=1)
@@ -76,7 +82,11 @@ def official_backend(
     return BackendOutput(
         scores=np.concatenate(values),
         warmup_rows=window,
-        metadata={"backend": "ML4ITS MTAD-GAT", "window_size": window},
+        metadata={
+            "backend": "ML4ITS MTAD-GAT",
+            "window_size": window,
+            "device": str(device),
+        },
     )
 
 
@@ -94,4 +104,3 @@ def run_adapter(
 
 if __name__ == "__main__":
     adapter_main(METHOD_ID, official_backend)
-

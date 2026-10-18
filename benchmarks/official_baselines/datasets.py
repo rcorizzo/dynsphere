@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import re
 from pathlib import Path
 from typing import Iterator
 
@@ -16,15 +17,7 @@ from benchmarks.real_world_datasets.run_real_world_datasets import (
     find_label,
     read_csv,
 )
-from benchmarks.tsb_ad_m.run_tsb_ad_m import (
-    declared_prefix_indices,
-    load_tsb_csv,
-    source_name,
-)
-
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SMD22 = "078_SMD_id_22_Facility_tr_500_1st_326.csv"
 SCALING_RULE = "standard-train-only-v1"
 CONTEXTUAL_TRAIN = REPO_ROOT / "data" / "contextual" / "pendulum_contextual_train.csv"
 CONTEXTUAL_TEST = REPO_ROOT / "data" / "contextual" / "pendulum_contextual_test.csv"
@@ -82,6 +75,50 @@ REAL_WORLD_SPECS = {
 }
 
 
+def source_name(path: Path) -> str:
+    """Return the TSB-AD-M source family encoded in a trajectory filename."""
+    prefix = path.name.split("_id_", 1)[0]
+    fields = prefix.split("_", 1)
+    if len(fields) != 2 or not fields[1]:
+        raise ValueError(f"No source family found in filename: {path.name}")
+    return fields[1]
+
+
+def load_tsb_csv(path: Path) -> tuple[np.ndarray, np.ndarray]:
+    """Load one multivariate TSB-AD-M trajectory, including single-class files."""
+    frame = pd.read_csv(path).dropna()
+    label_column = "Label" if "Label" in frame.columns else frame.columns[-1]
+    labels = frame[label_column].astype(int).to_numpy()
+    features = (
+        frame.drop(columns=[label_column])
+        .select_dtypes(include=[np.number])
+        .to_numpy(dtype=float)
+    )
+    if features.ndim != 2 or features.shape[1] < 2:
+        raise ValueError(f"{path} is not multivariate after loading: shape={features.shape}")
+    return features, labels
+
+
+def declared_prefix_indices(
+    path: Path,
+    labels: np.ndarray,
+    min_train: int,
+    source_stride: int = 1,
+) -> np.ndarray:
+    """Return rows belonging to the filename-declared normal training prefix."""
+    match = re.search(r"_tr_(\d+)_", path.name)
+    if match is None:
+        raise ValueError(f"No declared training prefix found in filename: {path.name}")
+    if source_stride < 1:
+        raise ValueError("source_stride must be positive")
+    declared_rows = int(match.group(1))
+    end = min((declared_rows + source_stride - 1) // source_stride, len(labels))
+    indices = np.arange(end)
+    if len(indices) < min_train:
+        raise ValueError(f"Declared prefix has {len(indices)} rows; need at least {min_train}")
+    return indices
+
+
 def read_eval_manifest(path: Path) -> tuple[str, ...]:
     """Read the exact 180-row official multivariate evaluation manifest."""
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -101,17 +138,9 @@ def read_eval_manifest(path: Path) -> tuple[str, ...]:
 def training_indices_for_tsb(
     path: Path, labels: np.ndarray, min_train: int = 16
 ) -> tuple[np.ndarray, str]:
-    """Return verified normal-prefix indices and their declared protocol."""
+    """Return the official filename-declared training prefix."""
     labels = np.asarray(labels, dtype=int)
-    try:
-        return declared_prefix_indices(path, labels, min_train), "declared-prefix"
-    except ValueError:
-        if path.name != SMD22:
-            raise
-        positives = np.flatnonzero(labels == 1)
-        if len(positives) == 0 or int(positives[0]) < min_train:
-            raise ValueError("SMD-22 lacks the documented maximal clean prefix")
-        return np.arange(int(positives[0])), "maximal-clean-prefix"
+    return declared_prefix_indices(path, labels, min_train), "declared-prefix"
 
 
 def fit_training_scaler(

@@ -282,6 +282,7 @@ revision and external-source provenance before submission:
 ```bash
 cd "$DYNSPHERE_REPO"
 git rev-parse HEAD
+test -z "$(git status --porcelain)"
 .venv/bin/python -m json.tool \
   "$DYNSPHERE_RESULT_ROOT/setup/provenance_report.json" | less
 ```

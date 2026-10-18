@@ -40,19 +40,36 @@ def test_kmeans_uses_fixed_capacity_and_nearest_center_distance() -> None:
 
 
 def test_euclidean_control_uses_retained_single_mode_scorer(monkeypatch) -> None:
-    requested: list[str] = []
+    observed: dict[str, object] = {}
 
-    def fake_method_scorer(method_id: str):
-        requested.append(method_id)
-        return lambda train, test, indices, seed: np.arange(len(test), dtype=float) + seed
+    class FakePredictor:
+        def __init__(self, **configuration):
+            observed["configuration"] = configuration
 
-    monkeypatch.setattr(local_controls, "method_scorer", fake_method_scorer)
+        def fit(self, train, entities, times):
+            observed["fit"] = (train.copy(), entities.copy(), times.copy())
+            return self
+
+        def decision_function(self, test, entities, times):
+            observed["score"] = (test.copy(), entities.copy(), times.copy())
+            return np.arange(len(test), dtype=float) + 37
+
+    monkeypatch.setattr(local_controls, "PredictiveGenerativeDetector", FakePredictor)
     train = np.zeros((24, 2))
     test = np.zeros((5, 2))
 
     scores, metadata = score_euclidean_predictor(train, test, seed=37)
 
-    assert requested == ["predictive_euclidean_single"]
+    assert observed["configuration"] == {
+        "geometry": "euclidean",
+        "latent_dim": 2,
+        "hidden_dim": 48,
+        "n_modes": 1,
+        "epochs": 15,
+        "sequence_length": 128,
+        "calibration_fraction": 0.2,
+        "random_state": 37,
+    }
     np.testing.assert_array_equal(scores, np.arange(5, dtype=float) + 37)
     assert metadata == {"base_method": "predictive_euclidean_single"}
 
@@ -126,11 +143,17 @@ def test_dynsphere_family_uses_matched_geometry_and_concept_configuration(monkey
 
 
 def test_all_local_scorers_return_aligned_finite_scores(monkeypatch) -> None:
-    monkeypatch.setattr(
-        local_controls,
-        "method_scorer",
-        lambda method_id: lambda train, test, indices, seed: np.ones(len(test)),
-    )
+    class FakePredictor:
+        def __init__(self, **configuration):
+            pass
+
+        def fit(self, train, entities, times):
+            return self
+
+        def decision_function(self, test, entities, times):
+            return np.ones(len(test))
+
+    monkeypatch.setattr(local_controls, "PredictiveGenerativeDetector", FakePredictor)
 
     class FakeDynSphere:
         def __init__(self, **configuration):

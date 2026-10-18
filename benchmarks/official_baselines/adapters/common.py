@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +23,19 @@ class BackendOutput:
 
 
 Backend = Callable[[np.ndarray, np.ndarray, Mapping[str, object], int], BackendOutput]
+
+
+def resolve_torch_device(torch, requested: str | None = None):
+    """Resolve the requested execution device and reject unavailable CUDA."""
+
+    selection = (requested or os.environ.get("DYNSPHERE_DEVICE", "auto")).lower()
+    if selection not in {"auto", "cpu", "cuda"}:
+        raise ValueError("DYNSPHERE_DEVICE must be auto, cpu, or cuda")
+    if selection == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CUDA was requested but no CUDA accelerator is visible")
+    if selection == "auto":
+        selection = "cuda" if torch.cuda.is_available() else "cpu"
+    return torch.device(selection)
 
 
 def source_directory(method_id: str) -> Path:
@@ -100,4 +114,3 @@ def adapter_main(method_id: str, backend: Backend) -> None:
         configuration,
         backend,
     )
-

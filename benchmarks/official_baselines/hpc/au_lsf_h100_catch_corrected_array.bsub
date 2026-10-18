@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#BSUB -J "dynsphere-catch-fixed[1-16]"
+#BSUB -q h100
+#BSUB -gpu "num=1:gmodel=NVIDIAH100PCIe"
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=32000]"
+#BSUB -W 48:00
+#BSUB -o logs/au-catch-fixed-%J-%I.out
+#BSUB -e logs/au-catch-fixed-%J-%I.err
+
+set -euo pipefail
+
+: "${DYNSPHERE_REPO:?Set DYNSPHERE_REPO to the repository path on Lovelace}"
+RESULT_ROOT="${DYNSPHERE_RESULT_ROOT:-$DYNSPHERE_REPO/results/official_baselines_v1}"
+export DYNSPHERE_DEVICE=cuda
+export DYNSPHERE_METHODS="catch"
+export DYNSPHERE_CAMPAIGN_MANIFEST="${DYNSPHERE_CAMPAIGN_MANIFEST:-$RESULT_ROOT/campaigns/hpc-seed37-au-catch-overlap-v1.json}"
+exec bash "$DYNSPHERE_REPO/benchmarks/official_baselines/hpc/run_au_array.sh"

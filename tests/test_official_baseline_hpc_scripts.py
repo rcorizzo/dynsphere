@@ -72,6 +72,14 @@ def test_au_runner_loads_cluster_git_module_when_git_is_unavailable() -> None:
     assert git_check < module_load < campaign_execution
 
 
+def test_final_campaign_rejects_an_uncommitted_source_tree() -> None:
+    for name in ("run_au_array.sh", "plgrid_slurm_array.sh"):
+        script = _read(name)
+        assert 'PROFILE" == "paper-multiseed"' in script
+        assert "git status --porcelain" in script
+        assert "requires a clean committed repository" in script
+
+
 def test_plgrid_runner_uses_slurm_zero_based_array_and_explicit_resources() -> None:
     script = _read("plgrid_slurm_array.sh")
 

@@ -10,6 +10,7 @@ import pytest
 
 from benchmarks.official_baselines.datasets import (
     fit_training_scaler,
+    load_tsb_csv,
     load_tsb_cases,
     read_eval_manifest,
     training_indices_for_tsb,
@@ -40,6 +41,13 @@ def test_official_manifest_has_180_unique_rows_and_verified_digest() -> None:
     assert provenance["row_count"] == 180
     assert provenance["sha256"] == hashlib.sha256(MANIFEST.read_bytes()).hexdigest()
     assert provenance["source_commit"] == "ed74348e7876c9268b7a737c77f2f5f56f7fa458"
+
+
+def test_official_dataset_loader_has_no_experimental_runner_dependency() -> None:
+    source = (REPO_ROOT / "benchmarks" / "official_baselines" / "datasets.py").read_text(
+        encoding="utf-8"
+    )
+    assert "benchmarks.tsb_ad_m.run_tsb_ad_m" not in source
 
 
 def test_manifest_rejects_duplicate_or_extra_rows(tmp_path: Path) -> None:
@@ -77,22 +85,40 @@ def test_declared_prefix_is_used_when_it_is_clean() -> None:
     assert protocol == "declared-prefix"
 
 
-def test_contaminated_ordinary_declared_prefix_is_rejected() -> None:
+def test_official_declared_prefix_is_used_when_it_contains_anomalies() -> None:
     path = Path("002_MSL_id_1_Sensor_tr_5_1st_9.csv")
     labels = np.array([0, 0, 1, 0, 0, 1, 1, 0, 0])
 
-    with pytest.raises(ValueError, match="contains labeled anomalies"):
-        training_indices_for_tsb(path, labels, min_train=2)
+    indices, protocol = training_indices_for_tsb(path, labels, min_train=2)
+
+    np.testing.assert_array_equal(indices, np.arange(5))
+    assert protocol == "declared-prefix"
 
 
-def test_named_smd22_uses_only_its_maximal_clean_prefix() -> None:
+def test_named_smd22_uses_its_official_declared_prefix() -> None:
     labels = np.zeros(600, dtype=int)
     labels[326:330] = 1
 
     indices, protocol = training_indices_for_tsb(Path(SMD22), labels, min_train=16)
 
-    np.testing.assert_array_equal(indices, np.arange(326))
-    assert protocol == "maximal-clean-prefix"
+    np.testing.assert_array_equal(indices, np.arange(500))
+    assert protocol == "declared-prefix"
+
+
+def test_tsb_loader_accepts_a_single_class_for_score_generation(tmp_path: Path) -> None:
+    path = tmp_path / "034_GHL_id_3_Sensor_tr_3_1st_9.csv"
+    path.write_text(
+        "feature_1,feature_2,Label\n"
+        "1.0,2.0,0\n"
+        "2.0,3.0,0\n"
+        "3.0,4.0,0\n",
+        encoding="utf-8",
+    )
+
+    features, labels = load_tsb_csv(path)
+
+    assert features.shape == (3, 2)
+    np.testing.assert_array_equal(labels, np.zeros(3, dtype=int))
 
 
 def test_training_scaler_never_uses_test_statistics() -> None:

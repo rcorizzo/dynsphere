@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#BSUB -J "dynsphere-cpu[1-16]"
+#BSUB -q normal
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=16000]"
+#BSUB -W 48:00
+#BSUB -o logs/au-cpu-%J-%I.out
+#BSUB -e logs/au-cpu-%J-%I.err
+
+set -euo pipefail
+
+: "${DYNSPHERE_REPO:?Set DYNSPHERE_REPO to the repository path on Lovelace}"
+RESULT_ROOT="${DYNSPHERE_RESULT_ROOT:-$DYNSPHERE_REPO/results/official_baselines_v1}"
+export DYNSPHERE_DEVICE=cpu
+export DYNSPHERE_METHODS="dagmm omni_anomaly_tsb_ad"
+export DYNSPHERE_CAMPAIGN_MANIFEST="${DYNSPHERE_CAMPAIGN_MANIFEST:-$RESULT_ROOT/campaigns/hpc-seed37-au-cpu.json}"
+exec bash "$DYNSPHERE_REPO/benchmarks/official_baselines/hpc/run_au_array.sh"

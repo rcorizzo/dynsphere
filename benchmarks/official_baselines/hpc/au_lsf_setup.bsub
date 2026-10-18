@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#BSUB -J dynsphere-setup
+#BSUB -q normal
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=32000]"
+#BSUB -W 08:00
+#BSUB -o logs/au-setup-%J.out
+#BSUB -e logs/au-setup-%J.err
+
+set -euo pipefail
+
+: "${DYNSPHERE_REPO:?Set DYNSPHERE_REPO to the repository path on Lovelace}"
+cd "$DYNSPHERE_REPO"
+exec bash benchmarks/official_baselines/hpc/setup_environment.sh

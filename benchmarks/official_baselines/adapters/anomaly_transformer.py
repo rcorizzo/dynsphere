@@ -12,6 +12,7 @@ from benchmarks.official_baselines.adapters.common import (
     Backend,
     BackendOutput,
     adapter_main,
+    resolve_torch_device,
     run_backend_adapter,
     source_directory,
 )
@@ -20,9 +21,14 @@ from benchmarks.official_baselines.adapters.common import (
 METHOD_ID = "anomaly_transformer"
 
 
-def _enable_cpu_compatibility(torch) -> bool:
+def _enable_cpu_compatibility(torch, selected_device=None) -> bool:
     """Keep the author's unconditional CUDA transfers on the CPU when required."""
-    if torch.cuda.is_available():
+    use_cpu = (
+        str(selected_device).startswith("cpu")
+        if selected_device is not None
+        else not torch.cuda.is_available()
+    )
+    if not use_cpu:
         return False
 
     def remain_on_cpu(tensor, *args, **kwargs):
@@ -53,7 +59,8 @@ def official_backend(
     from torch.utils.data import DataLoader, TensorDataset
 
     torch.manual_seed(seed)
-    cpu_compatibility = _enable_cpu_compatibility(torch)
+    device = resolve_torch_device(torch)
+    cpu_compatibility = _enable_cpu_compatibility(torch, device)
     source = source_directory(METHOD_ID)
     sys.path.insert(0, str(source))
     try:
@@ -75,13 +82,14 @@ def official_backend(
         d_model=int(configuration.get("d_model", 128)),
         n_heads=int(configuration.get("n_heads", 4)),
         e_layers=int(configuration.get("e_layers", 3)),
-    )
+    ).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=float(configuration.get("lr", 1e-4)))
     reconstruction = nn.MSELoss()
     k = float(configuration.get("k", 3.0))
     model.train()
     for _ in range(int(configuration.get("epochs", 3))):
         for (batch,) in train_loader:
+            batch = batch.to(device)
             optimizer.zero_grad()
             output, series, prior, _ = model(batch)
             series_loss = 0.0
@@ -105,6 +113,7 @@ def official_backend(
     energies: list[np.ndarray] = []
     with torch.no_grad():
         for (batch,) in test_loader:
+            batch = batch.to(device)
             output, series, prior, _ = model(batch)
             loss = torch.mean(criterion(batch, output), dim=-1)
             series_loss = 0.0
@@ -124,7 +133,8 @@ def official_backend(
             "backend": "author Anomaly Transformer",
             "window_size": window,
             "d_model": int(configuration.get("d_model", 128)),
-            "device": "cpu" if cpu_compatibility else "cuda",
+            "device": str(device),
+            "cpu_compatibility": cpu_compatibility,
         },
     )
 

@@ -18,7 +18,7 @@ from benchmarks.official_baselines.adapters import (
     tab_dagmm,
     tranad,
 )
-from benchmarks.official_baselines.adapters.common import BackendOutput
+from benchmarks.official_baselines.adapters.common import BackendOutput, resolve_torch_device
 from benchmarks.official_baselines.provenance import ImplementationSpec
 from benchmarks.official_baselines.setup_external import prepare_source, verify_source
 
@@ -176,6 +176,88 @@ def test_anomaly_transformer_cpu_compatibility_replaces_cuda_transfer() -> None:
 
     assert changed is True
     assert value.cuda() is value
+
+
+def test_anomaly_transformer_cpu_request_overrides_visible_cuda() -> None:
+    class Tensor:
+        def cuda(self):
+            return "cuda"
+
+    class Cuda:
+        @staticmethod
+        def is_available():
+            return True
+
+    Torch = type("Torch", (), {"cuda": Cuda(), "Tensor": Tensor})
+
+    changed = anomaly_transformer._enable_cpu_compatibility(Torch, "cpu")
+    value = Tensor()
+
+    assert changed is True
+    assert value.cuda() is value
+
+
+def test_requested_cuda_device_requires_visible_accelerator() -> None:
+    class Cuda:
+        @staticmethod
+        def is_available():
+            return False
+
+    class Torch:
+        cuda = Cuda()
+
+        @staticmethod
+        def device(name):
+            return name
+
+    with pytest.raises(RuntimeError, match="CUDA was requested"):
+        resolve_torch_device(Torch, requested="cuda")
+
+
+def test_requested_cuda_device_is_selected_when_available() -> None:
+    class Cuda:
+        @staticmethod
+        def is_available():
+            return True
+
+    class Torch:
+        cuda = Cuda()
+
+        @staticmethod
+        def device(name):
+            return name
+
+    assert resolve_torch_device(Torch, requested="cuda") == "cuda"
+    assert resolve_torch_device(Torch, requested="cpu") == "cpu"
+
+
+def test_catch_overlap_average_uses_patch_coverage_for_zero_losses() -> None:
+    torch = pytest.importorskip("torch")
+    patch_losses = torch.tensor(
+        [[[[0.0], [2.0], [0.0]], [[4.0], [0.0], [6.0]]]]
+    )
+
+    averaged = catch._overlap_average(torch, patch_losses, patch_stride=2)
+
+    assert torch.isfinite(averaged).all()
+    torch.testing.assert_close(
+        averaged,
+        torch.tensor([[[0.0], [2.0], [2.0], [0.0], [6.0]]]),
+    )
+
+
+def test_catch_overlap_average_preserves_positive_overlap_mean() -> None:
+    torch = pytest.importorskip("torch")
+    patch_losses = torch.tensor(
+        [[[[1.0], [2.0], [3.0]], [[4.0], [5.0], [6.0]]]]
+    )
+
+    averaged = catch._overlap_average(torch, patch_losses, patch_stride=2)
+
+    torch.testing.assert_close(
+        averaged,
+        torch.tensor([[[1.0], [2.0], [3.5], [5.0], [6.0]]]),
+    )
 
 
 def test_tranad_upstream_import_arguments_are_scoped(monkeypatch) -> None:

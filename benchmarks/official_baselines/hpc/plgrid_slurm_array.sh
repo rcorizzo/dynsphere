@@ -15,6 +15,10 @@ set -euo pipefail
 : "${SLURM_ARRAY_TASK_ID:?Submit this script as a SLURM job array}"
 
 PROFILE="${DYNSPHERE_PROFILE:-hpc-seed37}"
+if [[ "$PROFILE" == "paper-multiseed" ]] && [[ -n "$(git status --porcelain)" ]]; then
+  echo "The paper-multiseed campaign requires a clean committed repository" >&2
+  exit 2
+fi
 SHARD_COUNT="${DYNSPHERE_SHARD_COUNT:-16}"
 SHARD_INDEX="$SLURM_ARRAY_TASK_ID"
 if (( SHARD_INDEX < 0 || SHARD_INDEX >= SHARD_COUNT )); then

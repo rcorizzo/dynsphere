@@ -27,7 +27,9 @@ from benchmarks.official_baselines.datasets import (
     fit_training_scaler,
     load_contextual_case,
     load_real_world_case,
+    load_tsb_csv,
     read_eval_manifest,
+    source_name,
     training_indices_for_tsb,
 )
 from benchmarks.official_baselines.external import run_external
@@ -37,9 +39,6 @@ from benchmarks.official_baselines.provenance import (
     load_registry,
     run_identity,
 )
-from benchmarks.tsb_ad_m.run_tsb_ad_m import load_tsb_csv, source_name
-
-
 PACKAGE_ROOT = Path(__file__).resolve().parent
 REPO_ROOT = PACKAGE_ROOT.parents[1]
 DEFAULT_REGISTRY = PACKAGE_ROOT / "registry.json"

@@ -13,6 +13,7 @@ from benchmarks.official_baselines.adapters.common import (
     Backend,
     BackendOutput,
     adapter_main,
+    resolve_torch_device,
     run_backend_adapter,
     source_directory,
 )
@@ -52,6 +53,7 @@ def official_backend(
     from torch.utils.data import DataLoader, TensorDataset
 
     torch.manual_seed(seed)
+    device = resolve_torch_device(torch)
     source = source_directory(METHOD_ID)
     sys.path.insert(0, str(source))
     try:
@@ -59,7 +61,7 @@ def official_backend(
             from src.models import TranAD
     finally:
         sys.path.pop(0)
-    model = TranAD(train.shape[1]).double()
+    model = TranAD(train.shape[1]).double().to(device)
     window = model.n_window
     train_windows = _prefix_windows(torch.as_tensor(train, dtype=torch.double), window)
     test_windows = _prefix_windows(torch.as_tensor(test, dtype=torch.double), window)
@@ -74,6 +76,7 @@ def official_backend(
     epochs = int(configuration.get("epochs", 5))
     for epoch in range(epochs):
         for (batch,) in train_loader:
+            batch = batch.to(device)
             sequence = batch.permute(1, 0, 2)
             target = sequence[-1].reshape(1, len(batch), -1)
             first, second = model(sequence, target)
@@ -86,13 +89,18 @@ def official_backend(
     losses: list[np.ndarray] = []
     with torch.no_grad():
         for (batch,) in test_loader:
+            batch = batch.to(device)
             sequence = batch.permute(1, 0, 2)
             target = sequence[-1].reshape(1, len(batch), -1)
             _, output = model(sequence, target)
             losses.append(torch.mean((output - target) ** 2, dim=(0, 2)).cpu().numpy())
     return BackendOutput(
         scores=np.concatenate(losses),
-        metadata={"backend": "author TranAD", "window_size": window},
+        metadata={
+            "backend": "author TranAD",
+            "window_size": window,
+            "device": str(device),
+        },
     )
 
 

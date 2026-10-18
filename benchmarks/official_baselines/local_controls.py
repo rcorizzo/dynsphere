@@ -8,8 +8,8 @@ import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 
-from benchmarks.tsb_ad_m.run_tsb_ad_m import method_scorer
 from pendulum_detector import MultiConceptEuclideanDetector, MultiConceptPendulumDetector
+from predictive_generative_detector import PredictiveGenerativeDetector
 
 
 ScoreResult = tuple[np.ndarray, dict[str, object]]
@@ -76,8 +76,26 @@ def score_kmeans_distance(train: np.ndarray, test: np.ndarray, seed: int) -> Sco
 def score_euclidean_predictor(train: np.ndarray, test: np.ndarray, seed: int) -> ScoreResult:
     """Use the retained single-mode Euclidean predictor without duplicated logic."""
     train, test = _arrays(train, test)
-    scorer = method_scorer("predictive_euclidean_single")
-    scores = scorer(train, test, np.arange(len(train)), seed)
+    model = PredictiveGenerativeDetector(
+        geometry="euclidean",
+        latent_dim=min(6, train.shape[1]),
+        hidden_dim=48,
+        n_modes=1,
+        epochs=15,
+        sequence_length=128,
+        calibration_fraction=0.2,
+        random_state=seed,
+    )
+    model.fit(
+        train,
+        np.zeros(len(train), dtype=int),
+        np.arange(len(train), dtype=float),
+    )
+    scores = model.decision_function(
+        test,
+        np.zeros(len(test), dtype=int),
+        np.arange(len(test), dtype=float),
+    )
     return _result(
         scores,
         len(test),

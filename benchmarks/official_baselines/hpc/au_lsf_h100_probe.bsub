@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#BSUB -J dynsphere-h100-probe
+#BSUB -q h100
+#BSUB -gpu "num=1:gmodel=NVIDIAH100PCIe"
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=32000]"
+#BSUB -W 02:00
+#BSUB -o logs/au-h100-probe-%J.out
+#BSUB -e logs/au-h100-probe-%J.err
+
+set -euo pipefail
+
+: "${DYNSPHERE_REPO:?Set DYNSPHERE_REPO to the repository path on Lovelace}"
+exec bash "$DYNSPHERE_REPO/benchmarks/official_baselines/hpc/run_au_gpu_probe.sh"
