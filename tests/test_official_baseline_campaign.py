@@ -9,6 +9,7 @@ import pytest
 
 from benchmarks.official_baselines.campaign import (
     campaign_document,
+    merge_campaign_documents,
     partition_jobs,
     resolve_profile,
     scheduler_shard_index,
@@ -18,6 +19,8 @@ from benchmarks.official_baselines.provenance import ImplementationSpec
 from benchmarks.official_baselines.run_expanded_evaluation import (
     CaseDescriptor,
     ExperimentJob,
+    RunConfig,
+    build_matrix,
 )
 
 
@@ -70,6 +73,52 @@ def test_profiles_select_the_approved_execution_stages() -> None:
     )
     assert hpc.datasets[-1] == "TSB-AD-M"
     assert hpc.seeds == (37,)
+
+
+def test_paper_multiseed_profile_has_the_complete_matrix(tmp_path: Path) -> None:
+    profile = resolve_profile("paper-multiseed")
+    assert profile.methods == (
+        "pca_reconstruction",
+        "kmeans_distance",
+        "dagmm",
+        "catch",
+        "mtad_gat",
+        "omni_anomaly_tsb_ad",
+        "anomaly_transformer",
+        "tranad",
+        "predictive_euclidean_single",
+        "dynsphere",
+        "dynsphere_euclidean",
+        "dynsphere_one_regime",
+        "dynsphere_euclidean_one_regime",
+    )
+    assert profile.datasets == (
+        "DynSphere-Contextual",
+        "MSL",
+        "SMAP",
+        "SMD",
+        "BATADAL",
+        "HAI-20.07",
+        "PowerSystem",
+    )
+    assert profile.seeds == (37, 38, 39)
+    assert profile.timeout_seconds == 14_400
+
+    matrix = build_matrix(
+        RunConfig(
+            methods=profile.methods,
+            datasets=profile.datasets,
+            seeds=profile.seeds,
+            result_root=tmp_path,
+            timeout_seconds=profile.timeout_seconds,
+            dry_run=True,
+        )
+    )
+    assert len(matrix) == 2_457
+    for method in profile.methods:
+        assert sum(job.implementation.method_id == method for job in matrix) == 189
+    for seed in profile.seeds:
+        assert sum(job.case.seed == seed for job in matrix) == 819
 
 
 @pytest.mark.parametrize(
@@ -133,6 +182,37 @@ def test_existing_different_campaign_manifest_is_not_overwritten(tmp_path: Path)
 
     with pytest.raises(ValueError, match="different campaign"):
         write_campaign_manifest(path, campaign_document("test", (_job(0),), 1))
+
+
+def test_later_campaign_manifest_replaces_same_logical_method_case() -> None:
+    original = campaign_document("gpu-original", (_job(0, "catch"), _job(0, "mtad_gat")), 2)
+    corrected_job = _job(0, "catch")
+    corrected_job = ExperimentJob(
+        case=corrected_job.case,
+        implementation=ImplementationSpec(
+            **{
+                **corrected_job.implementation.__dict__,
+                "adapter_revision": "c" * 40,
+            }
+        ),
+        hyperparameters=corrected_job.hyperparameters,
+        result_root=corrected_job.result_root,
+        timeout_seconds=corrected_job.timeout_seconds,
+        resume=corrected_job.resume,
+    )
+    corrected = campaign_document("catch-corrected", (corrected_job,), 2)
+
+    merged = merge_campaign_documents((original, corrected))
+
+    assert merged["expected_job_count"] == 2
+    revisions = {
+        row["method_id"]: row["adapter_revision"] for row in merged["expected_jobs"]
+    }
+    assert revisions == {"catch": "c" * 40, "mtad_gat": "b" * 40}
+    assert merged["source_campaign_ids"] == [
+        original["campaign_id"],
+        corrected["campaign_id"],
+    ]
 
 
 def test_campaign_aggregation_cli_exposes_manifest_filter() -> None:

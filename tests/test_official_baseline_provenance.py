@@ -28,7 +28,10 @@ REQUIRED_METHODS = {
     "anomaly_transformer",
     "tranad",
     "predictive_euclidean_single",
+    "dynsphere",
+    "dynsphere_euclidean",
     "dynsphere_one_regime",
+    "dynsphere_euclidean_one_regime",
 }
 
 
@@ -51,6 +54,33 @@ def test_registry_has_all_required_methods_with_resolved_revisions() -> None:
     assert local_revisions == {current}
     assert {spec.adapter_revision for spec in specs.values()} == {current}
     assert resolve_local_revision(REPO_ROOT) == current
+
+
+def test_registry_declares_the_matched_dynsphere_factorial() -> None:
+    specs = load_registry(REGISTRY)
+    expected = {
+        "dynsphere": ("DynSphere-S", "spherical", 4),
+        "dynsphere_euclidean": ("DynSphere-E", "euclidean", 4),
+        "dynsphere_one_regime": ("DynSphere-S1", "spherical", 1),
+        "dynsphere_euclidean_one_regime": ("DynSphere-E1", "euclidean", 1),
+    }
+    for method_id, (display_name, geometry, n_concepts) in expected.items():
+        spec = specs[method_id]
+        assert spec.display_name == display_name
+        assert spec.adapter_command == ("__local__", method_id)
+        assert spec.default_hyperparameters["geometry"] == geometry
+        assert spec.default_hyperparameters["n_concepts"] == n_concepts
+        assert spec.default_hyperparameters["latent_dim"] == 5
+        assert spec.default_hyperparameters["propagation_radius"] == 8
+        assert spec.default_hyperparameters["weights"] == {
+            "position": 1.0,
+            "latent_dynamics": 1.8,
+            "raw_dynamics": 1.4,
+            "state_speed": 1.0,
+            "velocity": 0.8,
+            "transition": 0.8,
+            "regime_distance": 0.15,
+        }
 
 
 @pytest.mark.parametrize(
@@ -99,6 +129,10 @@ def test_catch_uses_fixed_batch_size_valid_for_declared_training_prefixes() -> N
     specs = load_registry(REGISTRY)
 
     assert specs["catch"].default_hyperparameters["batch_size"] == 32
+    assert (
+        specs["catch"].default_hyperparameters["frequency_overlap_correction"]
+        == "coverage-count-v1"
+    )
 
 
 def test_adapter_runtime_constraints_are_part_of_provenance() -> None:
@@ -114,6 +148,7 @@ def test_adapter_runtime_constraints_are_part_of_provenance() -> None:
         "joblib",
         "pyod",
     )
+    assert specs["mtad_gat"].runtime_requirements == ("torch==2.4.1",)
     assert specs["anomaly_transformer"].runtime_requirements == (
         "torch==2.4.1",
         "numpy==1.24.4",

@@ -17,6 +17,14 @@ from benchmarks.official_baselines.run_expanded_evaluation import (
 
 
 CAMPAIGN_SCHEMA = "official-baseline-campaign-v1"
+LOGICAL_CAMPAIGN_KEY_FIELDS = (
+    "case_id",
+    "dataset_id",
+    "source_family",
+    "trajectory_id",
+    "seed",
+    "method_id",
+)
 
 
 @dataclass(frozen=True)
@@ -62,6 +70,27 @@ PROFILES = {
         ),
         datasets=CURRENT_DATASETS,
         seeds=(38, 39),
+        timeout_seconds=14400,
+    ),
+    "paper-multiseed": CampaignProfile(
+        name="paper-multiseed",
+        methods=(
+            "pca_reconstruction",
+            "kmeans_distance",
+            "dagmm",
+            "catch",
+            "mtad_gat",
+            "omni_anomaly_tsb_ad",
+            "anomaly_transformer",
+            "tranad",
+            "predictive_euclidean_single",
+            "dynsphere",
+            "dynsphere_euclidean",
+            "dynsphere_one_regime",
+            "dynsphere_euclidean_one_regime",
+        ),
+        datasets=CURRENT_DATASETS,
+        seeds=(37, 38, 39),
         timeout_seconds=14400,
     ),
 }
@@ -144,6 +173,50 @@ def campaign_document(
         "schema_version": CAMPAIGN_SCHEMA,
         "profile": profile_name,
         "shard_count": shard_count,
+        "expected_job_count": len(expected_jobs),
+        "expected_jobs": expected_jobs,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return {**payload, "campaign_id": hashlib.sha256(canonical).hexdigest()}
+
+
+def merge_campaign_documents(
+    documents: Sequence[dict[str, object]],
+) -> dict[str, object]:
+    """Merge component manifests, with later sources replacing logical jobs."""
+    if not documents:
+        raise ValueError("At least one campaign manifest is required")
+    selected: dict[tuple[object, ...], dict[str, object]] = {}
+    source_ids: list[str] = []
+    shard_counts: list[int] = []
+    for document in documents:
+        if document.get("schema_version") != CAMPAIGN_SCHEMA:
+            raise ValueError("Campaign manifest has an unsupported schema")
+        campaign_id = document.get("campaign_id")
+        rows = document.get("expected_jobs")
+        if not isinstance(campaign_id, str) or not campaign_id:
+            raise ValueError("Every source campaign must identify its campaign_id")
+        if not isinstance(rows, list) or document.get("expected_job_count") != len(rows):
+            raise ValueError("Source campaign expected jobs are inconsistent")
+        source_ids.append(campaign_id)
+        shard_counts.append(int(document.get("shard_count", 1)))
+        for row in rows:
+            if not isinstance(row, dict) or any(
+                field not in row
+                for field in LOGICAL_CAMPAIGN_KEY_FIELDS + ("adapter_revision",)
+            ):
+                raise ValueError("Source campaign contains an incomplete job entry")
+            key = tuple(row[field] for field in LOGICAL_CAMPAIGN_KEY_FIELDS)
+            selected[key] = dict(row)
+    expected_jobs = sorted(
+        selected.values(),
+        key=lambda row: tuple(str(row[field]) for field in LOGICAL_CAMPAIGN_KEY_FIELDS),
+    )
+    payload: dict[str, object] = {
+        "schema_version": CAMPAIGN_SCHEMA,
+        "profile": "merged-components",
+        "shard_count": max(shard_counts),
+        "source_campaign_ids": source_ids,
         "expected_job_count": len(expected_jobs),
         "expected_jobs": expected_jobs,
     }

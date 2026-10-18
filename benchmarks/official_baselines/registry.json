@@ -48,7 +48,7 @@
       "revision": "3647c69be5eb56649b072596cf89098e689e20c3",
       "python": "3.8",
       "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.catch"],
-      "default_hyperparameters": {"window_size": 100, "epochs": 10, "batch_size": 32},
+      "default_hyperparameters": {"window_size": 100, "epochs": 10, "batch_size": 32, "frequency_overlap_correction": "coverage-count-v1"},
       "fallback_ids": ["catch_tab"]
     },
     {
@@ -59,7 +59,7 @@
       "repository_url": "https://github.com/ML4ITS/mtad-gat-pytorch.git",
       "revision": "a3719416527d57e0e364f9b489c5368ade1bc8e7",
       "python": "3.10",
-      "runtime_requirements": ["torch==2.14.1"],
+      "runtime_requirements": ["torch==2.4.1"],
       "adapter_command": ["{python}", "-m", "benchmarks.official_baselines.adapters.mtad_gat"],
       "default_hyperparameters": {"window_size": 100, "epochs": 10},
       "fallback_ids": []
@@ -115,15 +115,75 @@
       "fallback_ids": []
     },
     {
+      "method_id": "dynsphere",
+      "display_name": "DynSphere-S",
+      "source_kind": "local",
+      "implementation_category": "repository-maintained",
+      "repository_url": ".",
+      "revision": "current-git-commit",
+      "python": ">=3.9",
+      "adapter_command": ["__local__", "dynsphere"],
+      "default_hyperparameters": {
+        "geometry": "spherical",
+        "n_concepts": 4,
+        "latent_dim": 5,
+        "propagation_radius": 8,
+        "weights": {"position": 1.0, "latent_dynamics": 1.8, "raw_dynamics": 1.4, "state_speed": 1.0, "velocity": 0.8, "transition": 0.8, "regime_distance": 0.15}
+      },
+      "fallback_ids": []
+    },
+    {
+      "method_id": "dynsphere_euclidean",
+      "display_name": "DynSphere-E",
+      "source_kind": "local",
+      "implementation_category": "repository-maintained",
+      "repository_url": ".",
+      "revision": "current-git-commit",
+      "python": ">=3.9",
+      "adapter_command": ["__local__", "dynsphere_euclidean"],
+      "default_hyperparameters": {
+        "geometry": "euclidean",
+        "n_concepts": 4,
+        "latent_dim": 5,
+        "propagation_radius": 8,
+        "weights": {"position": 1.0, "latent_dynamics": 1.8, "raw_dynamics": 1.4, "state_speed": 1.0, "velocity": 0.8, "transition": 0.8, "regime_distance": 0.15}
+      },
+      "fallback_ids": []
+    },
+    {
       "method_id": "dynsphere_one_regime",
-      "display_name": "DynSphere one regime",
+      "display_name": "DynSphere-S1",
       "source_kind": "local",
       "implementation_category": "repository-maintained",
       "repository_url": ".",
       "revision": "current-git-commit",
       "python": ">=3.9",
       "adapter_command": ["__local__", "dynsphere_one_regime"],
-      "default_hyperparameters": {"n_concepts": 1},
+      "default_hyperparameters": {
+        "geometry": "spherical",
+        "n_concepts": 1,
+        "latent_dim": 5,
+        "propagation_radius": 8,
+        "weights": {"position": 1.0, "latent_dynamics": 1.8, "raw_dynamics": 1.4, "state_speed": 1.0, "velocity": 0.8, "transition": 0.8, "regime_distance": 0.15}
+      },
+      "fallback_ids": []
+    },
+    {
+      "method_id": "dynsphere_euclidean_one_regime",
+      "display_name": "DynSphere-E1",
+      "source_kind": "local",
+      "implementation_category": "repository-maintained",
+      "repository_url": ".",
+      "revision": "current-git-commit",
+      "python": ">=3.9",
+      "adapter_command": ["__local__", "dynsphere_euclidean_one_regime"],
+      "default_hyperparameters": {
+        "geometry": "euclidean",
+        "n_concepts": 1,
+        "latent_dim": 5,
+        "propagation_radius": 8,
+        "weights": {"position": 1.0, "latent_dynamics": 1.8, "raw_dynamics": 1.4, "state_speed": 1.0, "velocity": 0.8, "transition": 0.8, "regime_distance": 0.15}
+      },
       "fallback_ids": []
     },
     {
