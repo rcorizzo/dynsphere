@@ -1,0 +1,244 @@
+{
+  "timeseries": [
+    {
+      "name": "frequency",
+      "length": 8000,
+      "semi-supervised": true,
+      "supervised": false,
+      "base-oscillations": [
+        {
+          "kind": "sine",
+          "frequency": 1.0,
+          "amplitude": 1.0,
+          "variance": 0.02
+        },
+        {
+          "kind": "sine",
+          "frequency": 1.3,
+          "amplitude": 1.0,
+          "variance": 0.02
+        },
+        {
+          "kind": "sine",
+          "frequency": 0.7,
+          "amplitude": 1.0,
+          "variance": 0.02
+        }
+      ],
+      "anomalies": [
+        {
+          "exact-position": 4000,
+          "length": 400,
+          "channel": 0,
+          "kinds": [
+            {
+              "kind": "frequency",
+              "frequency_factor": 2.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "pattern-shift",
+      "length": 8000,
+      "semi-supervised": true,
+      "supervised": false,
+      "base-oscillations": [
+        {
+          "kind": "sine",
+          "frequency": 1.0,
+          "amplitude": 1.0,
+          "variance": 0.02
+        },
+        {
+          "kind": "sine",
+          "frequency": 1.3,
+          "amplitude": 1.0,
+          "variance": 0.02
+        },
+        {
+          "kind": "sine",
+          "frequency": 0.7,
+          "amplitude": 1.0,
+          "variance": 0.02
+        }
+      ],
+      "anomalies": [
+        {
+          "exact-position": 4000,
+          "length": 400,
+          "channel": 0,
+          "kinds": [
+            {
+              "kind": "pattern-shift",
+              "shift_by": 20,
+              "transition_window": 25
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mode-correlation",
+      "length": 8000,
+      "semi-supervised": true,
+      "supervised": false,
+      "base-oscillations": [
+        {
+          "kind": "random-mode-jump",
+          "frequency": 20,
+          "random-seed": 7,
+          "channel-diff": 0,
+          "channel-offset": 1,
+          "variance": 0.02
+        },
+        {
+          "kind": "random-mode-jump",
+          "frequency": 20,
+          "random-seed": 7,
+          "channel-diff": 0,
+          "channel-offset": 1,
+          "variance": 0.02
+        },
+        {
+          "kind": "random-mode-jump",
+          "frequency": 20,
+          "random-seed": 7,
+          "channel-diff": 0,
+          "channel-offset": 1,
+          "variance": 0.02
+        }
+      ],
+      "anomalies": [
+        {
+          "exact-position": 4000,
+          "length": 400,
+          "channel": 0,
+          "kinds": [
+            {
+              "kind": "mode-correlation"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "amplitude",
+      "length": 8000,
+      "semi-supervised": true,
+      "supervised": false,
+      "base-oscillations": [
+        {
+          "kind": "sine",
+          "frequency": 1.0,
+          "amplitude": 1.0,
+          "variance": 0.02
+        },
+        {
+          "kind": "sine",
+          "frequency": 1.3,
+          "amplitude": 1.0,
+          "variance": 0.02
+        },
+        {
+          "kind": "sine",
+          "frequency": 0.7,
+          "amplitude": 1.0,
+          "variance": 0.02
+        }
+      ],
+      "anomalies": [
+        {
+          "exact-position": 4000,
+          "length": 400,
+          "channel": 0,
+          "kinds": [
+            {
+              "kind": "amplitude",
+              "amplitude_factor": 1.5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mean",
+      "length": 8000,
+      "semi-supervised": true,
+      "supervised": false,
+      "base-oscillations": [
+        {
+          "kind": "sine",
+          "frequency": 1.0,
+          "amplitude": 1.0,
+          "variance": 0.02
+        },
+        {
+          "kind": "sine",
+          "frequency": 1.3,
+          "amplitude": 1.0,
+          "variance": 0.02
+        },
+        {
+          "kind": "sine",
+          "frequency": 0.7,
+          "amplitude": 1.0,
+          "variance": 0.02
+        }
+      ],
+      "anomalies": [
+        {
+          "exact-position": 4000,
+          "length": 400,
+          "channel": 0,
+          "kinds": [
+            {
+              "kind": "mean",
+              "offset": 0.75
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "variance",
+      "length": 8000,
+      "semi-supervised": true,
+      "supervised": false,
+      "base-oscillations": [
+        {
+          "kind": "sine",
+          "frequency": 1.0,
+          "amplitude": 1.0,
+          "variance": 0.02
+        },
+        {
+          "kind": "sine",
+          "frequency": 1.3,
+          "amplitude": 1.0,
+          "variance": 0.02
+        },
+        {
+          "kind": "sine",
+          "frequency": 0.7,
+          "amplitude": 1.0,
+          "variance": 0.02
+        }
+      ],
+      "anomalies": [
+        {
+          "exact-position": 4000,
+          "length": 400,
+          "channel": 0,
+          "kinds": [
+            {
+              "kind": "variance",
+              "variance": 0.15
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

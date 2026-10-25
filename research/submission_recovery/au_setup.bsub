@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#BSUB -J dynsphere-cpu-recovery-setup
+#BSUB -q long
+#BSUB -n 2
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=8000]"
+#BSUB -W 01:00
+#BSUB -o logs/au-recovery-setup-%J.out
+#BSUB -e logs/au-recovery-setup-%J.err
+set -euo pipefail
+module load git/2.40.0
+: "${DYNSPHERE_RECOVERY_REPO:?Set the isolated recovery checkout path}"
+cd "$DYNSPHERE_RECOVERY_REPO"
+export DYNSPHERE_DEVICE=cpu CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+exec .venv/bin/python -m research.submission_recovery.setup_runtime

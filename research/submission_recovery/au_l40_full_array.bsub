@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+#BSUB -J "dynsphere-heldout-l40[1-16]%4"
+#BSUB -q long
+#BSUB -gpu "num=1:gmodel=NVIDIAL40"
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=32000]"
+#BSUB -W 48:00
+#BSUB -o logs/au-l40-full-%J-%I.out
+#BSUB -e logs/au-l40-full-%J-%I.err
+set -euo pipefail
+module load git/2.40.0
+: "${DYNSPHERE_L40_REPO:?Set the verified private-runtime checkout}"
+cd "$DYNSPHERE_L40_REPO"
+export DYNSPHERE_DEVICE=cuda OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 LOKY_MAX_CPU_COUNT=1 PYTHONUNBUFFERED=1
+result_root="$DYNSPHERE_L40_REPO/results/submission_gpu_l40_20261025"
+hardware_root="$result_root/hardware/array-$LSB_JOBID/shard-$LSB_JOBINDEX"
+expected_runtime="$DYNSPHERE_L40_REPO/results/l40_compatibility_20261025/hardware/private-at-runtime.json"
+mkdir -p "$hardware_root"
+nvidia-smi > "$hardware_root/nvidia-smi.txt"
+for method in mtad_gat catch tranad anomaly_transformer; do
+  "benchmarks/official_baselines/.envs/$method/bin/python" -c '
+import importlib.metadata as m,json,os,sys,torch
+assert torch.cuda.is_available(), "CUDA is required"
+name=torch.cuda.get_device_name(0)
+assert "L40" in name, "An L40 GPU is required"
+runtime=None
+if sys.argv[1]=="anomaly_transformer":
+    with open(sys.argv[2]) as stream:expected=json.load(stream)
+    runtime={name:m.version(name) for name in expected["versions"]}
+    assert runtime==expected["versions"], "Private dependency versions changed"
+    assert torch.__version__==expected["torch_build"]
+x=torch.randn((256,256),device="cuda")
+assert bool(torch.isfinite(x@x).all().item())
+torch.cuda.synchronize()
+print(json.dumps({"method":sys.argv[1],"gpu":name,"torch":torch.__version__,
+ "compiled_cuda":torch.version.cuda,"runtime_versions":runtime,
+ "visible_devices":os.environ.get("CUDA_VISIBLE_DEVICES"),
+ "gpu_memory_bytes":torch.cuda.get_device_properties(0).total_memory,
+ "job_id":os.environ.get("LSB_JOBID"),"shard_index":os.environ.get("LSB_JOBINDEX"),
+ "host":os.uname().nodename,"cuda_matrix_check":"passed"}))
+' "$method" "$expected_runtime" > "$hardware_root/$method.json"
+done
+.venv/bin/python -c '
+import json
+from pathlib import Path
+from research.evaluation_protocols.campaign import ROOT,_identity,digest
+expected="16b7c6842a9595a8cf610b019fecc25dc9555ff2d47191cc6832eb39c114b3ef"
+path=ROOT/"results/l40_compatibility_20261025/deep-manifests"/(expected+".json")
+doc=json.loads(path.read_text())
+assert _identity({k:v for k,v in doc.items() if k!="manifest_id"})==expected
+assert all(digest(ROOT/name)==value for name,value in doc["code_hashes"].items())
+assert all(digest(ROOT/name)==value for name,value in doc["base_manifest"]["implementation_hashes"].items())
+'
+exec .venv/bin/python -m research.submission_campaign.deep \
+  --methods mtad_gat catch tranad anomaly_transformer --seeds 37 38 39 \
+  --shard-index "$((LSB_JOBINDEX-1))" --shard-count 16 \
+  --output "$result_root"

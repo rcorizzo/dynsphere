@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#BSUB -J "dynsphere-extension[1-16]%4"
+#BSUB -q long
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=16000]"
+#BSUB -W 24:00
+#BSUB -o logs/au-extension-%J-%I.out
+#BSUB -e logs/au-extension-%J-%I.err
+set -euo pipefail
+: "${DYNSPHERE_REPO:?Set the code repository path}"
+exec bash "$DYNSPHERE_REPO/benchmarks/official_baselines/hpc/run_extension_cpu.sh"

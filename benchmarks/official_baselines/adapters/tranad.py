@@ -45,6 +45,21 @@ def _prefix_windows(values, window):
     return torch.stack(windows)
 
 
+def _target_windows(values, window):
+    """Include row t as the final reconstruction target of window t."""
+    import torch
+
+    padded = torch.cat([values[0].repeat(window - 1, 1), values])
+    return torch.stack([padded[index:index + window] for index in range(len(values))])
+
+
+def _train_minmax(train, test):
+    """Use the author's featurewise rule with statistics from normal training only."""
+    minimum, maximum = np.min(train, axis=0), np.max(train, axis=0)
+    denominator = maximum - minimum + 0.0001
+    return (train - minimum) / denominator, (test - minimum) / denominator
+
+
 def official_backend(
     train: np.ndarray, test: np.ndarray, configuration: Mapping[str, object], seed: int
 ) -> BackendOutput:
@@ -52,6 +67,12 @@ def official_backend(
     from torch import nn
     from torch.utils.data import DataLoader, TensorDataset
 
+    revision = str(configuration.get('pipeline_revision', 'historical-v1'))
+    if revision not in ('historical-v1', 'audited-v2'):
+        raise ValueError(f'Unknown TranAD pipeline revision: {revision}')
+    audited = revision == 'audited-v2'
+    if audited:
+        train, test = _train_minmax(train, test)
     torch.manual_seed(seed)
     device = resolve_torch_device(torch)
     source = source_directory(METHOD_ID)
@@ -63,18 +84,22 @@ def official_backend(
         sys.path.pop(0)
     model = TranAD(train.shape[1]).double().to(device)
     window = model.n_window
-    train_windows = _prefix_windows(torch.as_tensor(train, dtype=torch.double), window)
-    test_windows = _prefix_windows(torch.as_tensor(test, dtype=torch.double), window)
+    make_windows = _target_windows if audited else _prefix_windows
+    train_windows = make_windows(torch.as_tensor(train, dtype=torch.double), window)
+    test_windows = make_windows(torch.as_tensor(test, dtype=torch.double), window)
     batch_size = int(configuration.get("batch_size", model.batch))
-    train_loader = DataLoader(TensorDataset(train_windows), batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(TensorDataset(train_windows), batch_size=batch_size, shuffle=not audited)
     test_loader = DataLoader(TensorDataset(test_windows), batch_size=batch_size, shuffle=False)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=float(configuration.get("lr", model.lr)), weight_decay=1e-5
     )
     criterion = nn.MSELoss()
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 5, 0.9) if audited else None
     model.train()
     epochs = int(configuration.get("epochs", 5))
+    history = []
     for epoch in range(epochs):
+        epoch_losses = []
         for (batch,) in train_loader:
             batch = batch.to(device)
             sequence = batch.permute(1, 0, 2)
@@ -85,6 +110,10 @@ def official_backend(
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            epoch_losses.append(float(loss.detach().cpu()))
+        history.append(float(np.mean(epoch_losses)))
+        if scheduler is not None:
+            scheduler.step()
     model.eval()
     losses: list[np.ndarray] = []
     with torch.no_grad():
@@ -100,6 +129,13 @@ def official_backend(
             "backend": "author TranAD",
             "window_size": window,
             "device": str(device),
+            "pipeline_revision": revision,
+            "scaling": 'training-only-feature-minmax-epsilon-1e-4' if audited else 'supplied-inputs',
+            "target_alignment": 'score-t-target-t' if audited else 'historical-score-t-target-t-minus-1',
+            "epochs": epochs,
+            "training_loss": history,
+            "shuffle": not audited,
+            "lr_schedule": 'StepLR-5-0.9' if audited else 'constant',
         },
     )
 

@@ -13,7 +13,13 @@ import pandas as pd
 from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.preprocessing import StandardScaler
 
+from manifold_dynamics_detector import ManifoldDynamicsDetector
+from boundary_change_point_detector import BoundaryChangePointDetector
+from semi_markov_change_point_detector import SemiMarkovChangePointDetector
 from pendulum_detector import MultiConceptPendulumDetector
+from predictive_generative_detector import PredictiveGenerativeDetector
+from segment_predictive_detector import SegmentPredictiveDetector
+from unified_generative_detector import UnifiedGenerativeDetector
 
 
 def load_pyod_models(contamination: float, random_state: int) -> dict[str, object]:
@@ -62,8 +68,9 @@ def metric_dict(
         return result
     result["auroc"] = float(roc_auc_score(y_true, scores))
     result["auprc"] = float(average_precision_score(y_true, scores))
-    from range_metrics import best_point_adjusted_f1, practical_range_metrics
+    from range_metrics import best_plain_f1, best_point_adjusted_f1, practical_range_metrics
 
+    result.update(best_plain_f1(y_true, scores))
     result.update(best_point_adjusted_f1(y_true, scores))
     result.update(practical_range_metrics(y_true, scores))
     if include_vus:
@@ -208,9 +215,90 @@ def main() -> None:
     parser.add_argument("--max-train-rows", type=int, default=5000)
     parser.add_argument("--skip-pyod", action="store_true")
     parser.add_argument("--include-neural", action="store_true")
+    parser.add_argument(
+        "--include-manifold",
+        action="store_true",
+        help="Run the matched conditional-dynamics models on spherical and Euclidean latent spaces.",
+    )
+    parser.add_argument(
+        "--skip-legacy-dynsphere",
+        action="store_true",
+        help="Skip DynSphere and its legacy score-component ablations.",
+    )
+    parser.add_argument(
+        "--include-local-manifold",
+        action="store_true",
+        help="Add nonlinear neighbor-conditioned manifold fields to the matched comparison.",
+    )
+    parser.add_argument("--manifold-latent-dim", type=int, default=5)
+    parser.add_argument("--manifold-modes", type=int, default=4)
+    parser.add_argument("--manifold-ema-alpha", type=float, default=1.0)
+    parser.add_argument("--manifold-calibration-fraction", type=float, default=0.2)
+    parser.add_argument("--manifold-local-neighbors", type=int, default=64)
+    parser.add_argument(
+        "--include-unified",
+        action="store_true",
+        help="Run the jointly trained observation--dynamics likelihood and its factor ablations.",
+    )
+    parser.add_argument("--unified-latent-dim", type=int, default=6)
+    parser.add_argument("--unified-hidden-dim", type=int, default=48)
+    parser.add_argument("--unified-modes", type=int, default=4)
+    parser.add_argument("--unified-epochs", type=int, default=15)
+    parser.add_argument("--unified-sequence-length", type=int, default=128)
+    parser.add_argument(
+        "--include-predictive",
+        action="store_true",
+        help="Run the causal mode-conditioned next-observation likelihood.",
+    )
+    parser.add_argument("--predictive-latent-dim", type=int, default=6)
+    parser.add_argument("--predictive-hidden-dim", type=int, default=48)
+    parser.add_argument("--predictive-modes", type=int, default=4)
+    parser.add_argument("--predictive-epochs", type=int, default=15)
+    parser.add_argument("--predictive-sequence-length", type=int, default=128)
+    parser.add_argument(
+        "--include-identifiable-predictive",
+        action="store_true",
+        help="Run self-supervised mode-identifiability variants of the predictive likelihood.",
+    )
+    parser.add_argument(
+        "--include-segment-predictive",
+        action="store_true",
+        help="Run the multi-horizon segment-continuity likelihood ratio.",
+    )
+    parser.add_argument(
+        "--segment-horizons",
+        nargs="+",
+        type=int,
+        default=[2, 4, 8, 16, 32],
+    )
+    parser.add_argument("--segment-rollout-epochs", type=int, default=0)
+    parser.add_argument("--segment-probabilistic-rollout", action="store_true")
+    parser.add_argument(
+        "--include-boundary-change-point",
+        action="store_true",
+        help="Run the explicit continuation-versus-reset boundary likelihood ratio.",
+    )
+    parser.add_argument("--boundary-reset-components", type=int, default=4)
+    parser.add_argument(
+        "--include-semi-markov-change-point",
+        action="store_true",
+        help="Marginalize boundary evidence under a fixed semi-Markov duration prior.",
+    )
+    parser.add_argument("--semi-markov-max-duration", type=int, default=32)
+    parser.add_argument("--semi-markov-mean-duration", type=float, default=16.0)
+    parser.add_argument(
+        "--semi-markov-duration-grid",
+        nargs="+",
+        type=float,
+        default=None,
+        help="Report a predeclared duration-prior sensitivity grid from one fitted model.",
+    )
+    parser.add_argument("--semi-markov-boundary-hazard", type=float, default=0.01)
     parser.add_argument("--include-vus", action="store_true")
     parser.add_argument("--vus-window", type=int, default=None)
     args = parser.parse_args()
+    if args.include_local_manifold:
+        args.include_manifold = True
 
     train = pd.read_csv(args.train).sort_values(["entity_id", "time"]).reset_index(drop=True)
     test = pd.read_csv(args.test).sort_values(["entity_id", "time"]).reset_index(drop=True)
@@ -252,34 +340,342 @@ def main() -> None:
             )
         )
 
-    print("Running DynSphere...", flush=True)
-    start = time.perf_counter()
-    pendulum = MultiConceptPendulumDetector(
-        n_concepts=4,
-        latent_dim=5,
-        random_state=args.random_state,
-    )
-    # DynSphere needs complete sequences, so train on all normal rows.
     x_train_full = train[feature_cols].to_numpy()
-    pendulum.fit(x_train_full, train["entity_id"].to_numpy(), train["time"].to_numpy())
-    pendulum_scores = pendulum.decision_function(x_test, test["entity_id"].to_numpy(), test["time"].to_numpy())
-    timings["DynSphere"] = time.perf_counter() - start
-    results["DynSphere"] = evaluate_by_type(test, pendulum_scores, args.include_vus, args.vus_window)
 
-    ablations = {
-        "DynSphere-NoTransition": {"transition_weight": 0.0},
-        "DynSphere-NoEnergy": {"energy_weight": 0.0},
-        "DynSphere-NoRawDynamics": {"raw_dynamic_weight": 0.0},
-        "DynSphere-NoConcepts": {"n_concepts": 1, "transition_weight": 0.0},
-    }
-    for name, kwargs in ablations.items():
+    if args.include_predictive:
+        predictive_models = {
+            "PredictiveGenerative-Euclidean": {
+                "geometry": "euclidean",
+                "n_modes": args.predictive_modes,
+            },
+            "PredictiveGenerative-Sphere": {
+                "geometry": "sphere",
+                "n_modes": args.predictive_modes,
+            },
+            "PredictiveGenerative-EuclideanSingleMode": {
+                "geometry": "euclidean",
+                "n_modes": 1,
+            },
+        }
+        for name, configuration in predictive_models.items():
+            print(f"Running {name}...", flush=True)
+            start = time.perf_counter()
+            model = PredictiveGenerativeDetector(
+                latent_dim=args.predictive_latent_dim,
+                hidden_dim=args.predictive_hidden_dim,
+                epochs=args.predictive_epochs,
+                sequence_length=args.predictive_sequence_length,
+                random_state=args.random_state,
+                **configuration,
+            )
+            model.fit(
+                x_train_full,
+                train["entity_id"].to_numpy(),
+                train["time"].to_numpy(),
+            )
+            scores = model.decision_function(
+                x_test,
+                test["entity_id"].to_numpy(),
+                test["time"].to_numpy(),
+            )
+            timings[name] = time.perf_counter() - start
+            results[name] = evaluate_by_type(
+                test,
+                scores,
+                args.include_vus,
+                args.vus_window,
+            )
+
+    if args.include_identifiable_predictive:
+        identifiable_common = {
+            "geometry": "euclidean",
+            "mode_specific_decoders": True,
+            "contrastive_weight": 0.5,
+            "contrastive_margin": 1.0,
+            "diversity_weight": 0.05,
+            "diversity_margin": 0.5,
+            "balance_weight": 0.01,
+            "persistence_weight": 0.01,
+        }
+        identifiable_models = {
+            "IdentifiablePredictive-Euclidean": args.predictive_modes,
+            "IdentifiablePredictive-EuclideanSingleMode": 1,
+        }
+        for name, modes in identifiable_models.items():
+            print(f"Running {name}...", flush=True)
+            start = time.perf_counter()
+            model = PredictiveGenerativeDetector(
+                latent_dim=args.predictive_latent_dim,
+                hidden_dim=args.predictive_hidden_dim,
+                n_modes=modes,
+                epochs=args.predictive_epochs,
+                sequence_length=args.predictive_sequence_length,
+                random_state=args.random_state,
+                **identifiable_common,
+            )
+            model.fit(
+                x_train_full,
+                train["entity_id"].to_numpy(),
+                train["time"].to_numpy(),
+            )
+            scores = model.decision_function(
+                x_test,
+                test["entity_id"].to_numpy(),
+                test["time"].to_numpy(),
+            )
+            timings[name] = time.perf_counter() - start
+            results[name] = evaluate_by_type(
+                test,
+                scores,
+                args.include_vus,
+                args.vus_window,
+            )
+
+    if args.include_segment_predictive:
+        if args.segment_probabilistic_rollout:
+            name = "SegmentContinuity-StateSpace-Euclidean"
+        elif args.segment_rollout_epochs > 0:
+            name = "SegmentContinuity-Multistep-Euclidean"
+        else:
+            name = "SegmentContinuity-Euclidean"
         print(f"Running {name}...", flush=True)
         start = time.perf_counter()
-        model = MultiConceptPendulumDetector(latent_dim=5, random_state=args.random_state, **kwargs)
-        model.fit(x_train_full, train["entity_id"].to_numpy(), train["time"].to_numpy())
-        scores = model.decision_function(x_test, test["entity_id"].to_numpy(), test["time"].to_numpy())
+        model = SegmentPredictiveDetector(
+            horizons=tuple(args.segment_horizons),
+            geometry="euclidean",
+            latent_dim=args.predictive_latent_dim,
+            hidden_dim=args.predictive_hidden_dim,
+            epochs=args.predictive_epochs,
+            rollout_epochs=args.segment_rollout_epochs,
+            probabilistic_rollout=args.segment_probabilistic_rollout,
+            sequence_length=args.predictive_sequence_length,
+            random_state=args.random_state,
+        )
+        model.fit(
+            x_train_full,
+            train["entity_id"].to_numpy(),
+            train["time"].to_numpy(),
+        )
+        scores = model.decision_function(
+            x_test,
+            test["entity_id"].to_numpy(),
+            test["time"].to_numpy(),
+        )
         timings[name] = time.perf_counter() - start
-        results[name] = evaluate_by_type(test, scores, args.include_vus, args.vus_window)
+        results[name] = evaluate_by_type(
+            test,
+            scores,
+            args.include_vus,
+            args.vus_window,
+        )
+
+    if args.include_boundary_change_point:
+        name = "BoundaryChangePoint-Euclidean"
+        print(f"Running {name}...", flush=True)
+        start = time.perf_counter()
+        model = BoundaryChangePointDetector(
+            horizons=(1, *tuple(args.segment_horizons)),
+            latent_dim=args.predictive_latent_dim,
+            hidden_dim=args.predictive_hidden_dim,
+            epochs=args.predictive_epochs,
+            sequence_length=args.predictive_sequence_length,
+            rollout_epochs=max(1, args.segment_rollout_epochs),
+            reset_components=args.boundary_reset_components,
+            random_state=args.random_state,
+        )
+        model.fit(
+            x_train_full,
+            train["entity_id"].to_numpy(),
+            train["time"].to_numpy(),
+        )
+        scores = model.decision_function(
+            x_test,
+            test["entity_id"].to_numpy(),
+            test["time"].to_numpy(),
+        )
+        timings[name] = time.perf_counter() - start
+        results[name] = evaluate_by_type(
+            test,
+            scores,
+            args.include_vus,
+            args.vus_window,
+        )
+
+    if args.include_semi_markov_change_point:
+        base_name = "SemiMarkovChangePoint-Euclidean"
+        print(f"Running {base_name}...", flush=True)
+        start = time.perf_counter()
+        duration_grid = (
+            args.semi_markov_duration_grid
+            if args.semi_markov_duration_grid
+            else [args.semi_markov_mean_duration]
+        )
+        if any(duration <= 1.0 for duration in duration_grid):
+            raise ValueError("All semi-Markov mean durations must exceed one.")
+        model = SemiMarkovChangePointDetector(
+            max_duration=args.semi_markov_max_duration,
+            mean_duration=duration_grid[0],
+            boundary_hazard=args.semi_markov_boundary_hazard,
+            latent_dim=args.predictive_latent_dim,
+            hidden_dim=args.predictive_hidden_dim,
+            epochs=args.predictive_epochs,
+            sequence_length=args.predictive_sequence_length,
+            rollout_epochs=max(1, args.segment_rollout_epochs),
+            reset_components=args.boundary_reset_components,
+            random_state=args.random_state,
+        )
+        model.fit(
+            x_train_full,
+            train["entity_id"].to_numpy(),
+            train["time"].to_numpy(),
+        )
+        elapsed = time.perf_counter() - start
+        for duration in duration_grid:
+            model.mean_duration = duration
+            model._fit_log_age_prior()
+            scores = model.decision_function(
+                x_test,
+                test["entity_id"].to_numpy(),
+                test["time"].to_numpy(),
+            )
+            name = (
+                f"{base_name}-D{duration:g}"
+                if len(duration_grid) > 1
+                else base_name
+            )
+            timings[name] = elapsed if duration == duration_grid[0] else 0.0
+            results[name] = evaluate_by_type(
+                test,
+                scores,
+                args.include_vus,
+                args.vus_window,
+            )
+
+    if args.include_unified:
+        train_entities = train["entity_id"].to_numpy()
+        train_times = train["time"].to_numpy()
+        test_entities = test["entity_id"].to_numpy()
+        test_times = test["time"].to_numpy()
+        for geometry in ("euclidean", "sphere"):
+            print(f"Running UnifiedGenerative-{geometry.title()}...", flush=True)
+            start = time.perf_counter()
+            model = UnifiedGenerativeDetector(
+                geometry=geometry,
+                latent_dim=args.unified_latent_dim,
+                hidden_dim=args.unified_hidden_dim,
+                n_modes=args.unified_modes,
+                epochs=args.unified_epochs,
+                sequence_length=args.unified_sequence_length,
+                random_state=args.random_state,
+            )
+            model.fit(x_train_full, train_entities, train_times)
+            elapsed = time.perf_counter() - start
+            for factor in ("joint", "observation", "dynamics"):
+                name = f"UnifiedGenerative-{geometry.title()}-{factor.title()}"
+                scores = model.decision_function(
+                    x_test,
+                    test_entities,
+                    test_times,
+                    score_factor=factor,
+                )
+                timings[name] = elapsed if factor == "joint" else 0.0
+                results[name] = evaluate_by_type(
+                    test,
+                    scores,
+                    args.include_vus,
+                    args.vus_window,
+                )
+
+    if args.include_manifold:
+        manifold_models = {
+            "ManifoldDynamics-Sphere": {"geometry": "sphere", "include_radius": True},
+            "ManifoldDynamics-SphereNoRadius": {"geometry": "sphere", "include_radius": False},
+            "ManifoldDynamics-Euclidean": {"geometry": "euclidean", "include_radius": False},
+            "ManifoldDynamics-SphereSingleMode": {
+                "geometry": "sphere",
+                "include_radius": True,
+                "n_modes": 1,
+            },
+        }
+        if args.include_local_manifold:
+            manifold_models.update(
+                {
+                    "ManifoldDynamics-SphereLocal": {
+                        "geometry": "sphere",
+                        "include_radius": True,
+                        "field_model": "local",
+                    },
+                    "ManifoldDynamics-SphereLocalNoRadius": {
+                        "geometry": "sphere",
+                        "include_radius": False,
+                        "field_model": "local",
+                    },
+                    "ManifoldDynamics-EuclideanLocal": {
+                        "geometry": "euclidean",
+                        "include_radius": False,
+                        "field_model": "local",
+                    },
+                    "ManifoldDynamics-SphereLocalSingleMode": {
+                        "geometry": "sphere",
+                        "include_radius": True,
+                        "field_model": "local",
+                        "n_modes": 1,
+                    },
+                }
+            )
+        for name, configuration in manifold_models.items():
+            print(f"Running {name}...", flush=True)
+            start = time.perf_counter()
+            model_configuration = {
+                key: value for key, value in configuration.items() if key != "n_modes"
+            }
+            model = ManifoldDynamicsDetector(
+                latent_dim=args.manifold_latent_dim,
+                n_modes=int(configuration.get("n_modes", args.manifold_modes)),
+                ema_alpha=args.manifold_ema_alpha,
+                calibration_fraction=args.manifold_calibration_fraction,
+                local_neighbors=args.manifold_local_neighbors,
+                random_state=args.random_state,
+                **model_configuration,
+            )
+            model.fit(x_train_full, train["entity_id"].to_numpy(), train["time"].to_numpy())
+            scores = model.decision_function(x_test, test["entity_id"].to_numpy(), test["time"].to_numpy())
+            timings[name] = time.perf_counter() - start
+            results[name] = evaluate_by_type(test, scores, args.include_vus, args.vus_window)
+
+    if not args.skip_legacy_dynsphere:
+        print("Running DynSphere...", flush=True)
+        start = time.perf_counter()
+        pendulum = MultiConceptPendulumDetector(
+            n_concepts=4,
+            latent_dim=5,
+            random_state=args.random_state,
+        )
+        # Sequence models require complete entity trajectories and therefore use
+        # all normal training rows rather than the PyOD subsample.
+        pendulum.fit(x_train_full, train["entity_id"].to_numpy(), train["time"].to_numpy())
+        pendulum_scores = pendulum.decision_function(
+            x_test,
+            test["entity_id"].to_numpy(),
+            test["time"].to_numpy(),
+        )
+        timings["DynSphere"] = time.perf_counter() - start
+        results["DynSphere"] = evaluate_by_type(test, pendulum_scores, args.include_vus, args.vus_window)
+
+        ablations = {
+            "DynSphere-NoTransition": {"transition_weight": 0.0},
+            "DynSphere-NoEnergy": {"energy_weight": 0.0},
+            "DynSphere-NoRawDynamics": {"raw_dynamic_weight": 0.0},
+            "DynSphere-NoConcepts": {"n_concepts": 1, "transition_weight": 0.0},
+        }
+        for name, kwargs in ablations.items():
+            print(f"Running {name}...", flush=True)
+            start = time.perf_counter()
+            model = MultiConceptPendulumDetector(latent_dim=5, random_state=args.random_state, **kwargs)
+            model.fit(x_train_full, train["entity_id"].to_numpy(), train["time"].to_numpy())
+            scores = model.decision_function(x_test, test["entity_id"].to_numpy(), test["time"].to_numpy())
+            timings[name] = time.perf_counter() - start
+            results[name] = evaluate_by_type(test, scores, args.include_vus, args.vus_window)
 
     print_table(results)
 
@@ -290,6 +686,44 @@ def main() -> None:
         "contamination": args.contamination,
         "max_train_rows_for_pyod": args.max_train_rows,
         "include_neural": args.include_neural,
+        "include_manifold": args.include_manifold,
+        "include_local_manifold": args.include_local_manifold,
+        "include_unified": args.include_unified,
+        "include_predictive": args.include_predictive,
+        "include_identifiable_predictive": args.include_identifiable_predictive,
+        "include_segment_predictive": args.include_segment_predictive,
+        "segment_horizons": args.segment_horizons,
+        "segment_rollout_epochs": args.segment_rollout_epochs,
+        "segment_probabilistic_rollout": args.segment_probabilistic_rollout,
+        "include_boundary_change_point": args.include_boundary_change_point,
+        "boundary_reset_components": args.boundary_reset_components,
+        "include_semi_markov_change_point": args.include_semi_markov_change_point,
+        "semi_markov_max_duration": args.semi_markov_max_duration,
+        "semi_markov_mean_duration": args.semi_markov_mean_duration,
+        "semi_markov_duration_grid": args.semi_markov_duration_grid,
+        "semi_markov_boundary_hazard": args.semi_markov_boundary_hazard,
+        "skip_legacy_dynsphere": args.skip_legacy_dynsphere,
+        "manifold_configuration": {
+            "latent_dim": args.manifold_latent_dim,
+            "n_modes": args.manifold_modes,
+            "ema_alpha": args.manifold_ema_alpha,
+            "calibration_fraction": args.manifold_calibration_fraction,
+            "local_neighbors": args.manifold_local_neighbors,
+        },
+        "unified_configuration": {
+            "latent_dim": args.unified_latent_dim,
+            "hidden_dim": args.unified_hidden_dim,
+            "n_modes": args.unified_modes,
+            "epochs": args.unified_epochs,
+            "sequence_length": args.unified_sequence_length,
+        },
+        "predictive_configuration": {
+            "latent_dim": args.predictive_latent_dim,
+            "hidden_dim": args.predictive_hidden_dim,
+            "n_modes": args.predictive_modes,
+            "epochs": args.predictive_epochs,
+            "sequence_length": args.predictive_sequence_length,
+        },
         "include_vus": args.include_vus,
         "vus_window": args.vus_window,
         "timings_seconds": timings,

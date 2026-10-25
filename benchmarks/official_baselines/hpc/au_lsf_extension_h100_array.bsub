@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#BSUB -J "dynsphere-extension-gpu[1-16]%4"
+#BSUB -q h100
+#BSUB -gpu "num=1:gmodel=NVIDIAH100PCIe"
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=32000]"
+#BSUB -W 48:00
+#BSUB -o logs/au-extension-gpu-%J-%I.out
+#BSUB -e logs/au-extension-gpu-%J-%I.err
+set -euo pipefail
+export DYNSPHERE_EXTENSION_GROUP=gpu
+exec bash "${DYNSPHERE_REPO:?Set DYNSPHERE_REPO}/benchmarks/official_baselines/hpc/run_extension_baselines.sh"

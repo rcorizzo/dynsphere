@@ -171,6 +171,7 @@ def test_all_local_scorers_return_aligned_finite_scores(monkeypatch) -> None:
     test = np.arange(20, dtype=float).reshape(10, 2)
 
     assert set(LOCAL_SCORERS) == {
+        "linear_ridge_ar1",
         "pca_reconstruction",
         "kmeans_distance",
         "predictive_euclidean_single",

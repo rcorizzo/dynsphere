@@ -32,6 +32,13 @@ from run_tsb_ad_m import (  # noqa: E402
     score_dynsphere_ae,
     score_dynsphere_pp,
     score_forecast_mlp,
+    score_manifold_dynamics,
+    score_predictive_generative,
+    score_segment_predictive,
+    score_boundary_change_point,
+    score_semi_markov_change_point,
+    score_unified_generative,
+    score_unified_generative_factors,
     score_pyod,
     score_sequence_ae,
     score_static_ae,
@@ -40,6 +47,130 @@ from run_tsb_ad_m import (  # noqa: E402
 
 
 METHODS = {
+    "semi_markov_change_point_euclidean": score_semi_markov_change_point,
+    "boundary_change_point_euclidean": score_boundary_change_point,
+    "segment_state_space_euclidean": lambda x_train, x_all, train_idx, random_state: score_segment_predictive(
+        x_train,
+        x_all,
+        train_idx,
+        random_state,
+        rollout_epochs=10,
+        probabilistic_rollout=True,
+    ),
+    "segment_multistep_euclidean": lambda x_train, x_all, train_idx, random_state: score_segment_predictive(
+        x_train,
+        x_all,
+        train_idx,
+        random_state,
+        rollout_epochs=10,
+    ),
+    "segment_predictive_euclidean": score_segment_predictive,
+    "identifiable_euclidean": lambda x_train, x_all, train_idx, random_state: score_predictive_generative(
+        x_train,
+        x_all,
+        train_idx,
+        random_state,
+        geometry="euclidean",
+        n_modes=4,
+        mode_specific_decoders=True,
+        contrastive_weight=0.5,
+        diversity_weight=0.05,
+        balance_weight=0.01,
+        persistence_weight=0.01,
+    ),
+    "identifiable_euclidean_single": lambda x_train, x_all, train_idx, random_state: score_predictive_generative(
+        x_train,
+        x_all,
+        train_idx,
+        random_state,
+        geometry="euclidean",
+        n_modes=1,
+        mode_specific_decoders=True,
+        contrastive_weight=0.5,
+        diversity_weight=0.05,
+        balance_weight=0.01,
+        persistence_weight=0.01,
+    ),
+    "predictive_euclidean": lambda x_train, x_all, train_idx, random_state: score_predictive_generative(
+        x_train, x_all, train_idx, random_state, geometry="euclidean", n_modes=4
+    ),
+    "predictive_sphere": lambda x_train, x_all, train_idx, random_state: score_predictive_generative(
+        x_train, x_all, train_idx, random_state, geometry="sphere", n_modes=4
+    ),
+    "predictive_euclidean_single": lambda x_train, x_all, train_idx, random_state: score_predictive_generative(
+        x_train, x_all, train_idx, random_state, geometry="euclidean", n_modes=1
+    ),
+    "unified_euclidean_joint": lambda x_train, x_all, train_idx, random_state: score_unified_generative(
+        x_train,
+        x_all,
+        train_idx,
+        random_state,
+        geometry="euclidean",
+    ),
+    "unified_euclidean_observation": lambda x_train, x_all, train_idx, random_state: score_unified_generative(
+        x_train, x_all, train_idx, random_state, geometry="euclidean", score_factor="observation"
+    ),
+    "unified_euclidean_dynamics": lambda x_train, x_all, train_idx, random_state: score_unified_generative(
+        x_train, x_all, train_idx, random_state, geometry="euclidean", score_factor="dynamics"
+    ),
+    "unified_sphere_joint": lambda x_train, x_all, train_idx, random_state: score_unified_generative(
+        x_train,
+        x_all,
+        train_idx,
+        random_state,
+        geometry="sphere",
+    ),
+    "unified_sphere_observation": lambda x_train, x_all, train_idx, random_state: score_unified_generative(
+        x_train, x_all, train_idx, random_state, geometry="sphere", score_factor="observation"
+    ),
+    "unified_sphere_dynamics": lambda x_train, x_all, train_idx, random_state: score_unified_generative(
+        x_train, x_all, train_idx, random_state, geometry="sphere", score_factor="dynamics"
+    ),
+    "manifold_sphere_ridge": lambda x_train, x_all, train_idx, random_state: score_manifold_dynamics(
+        x_train,
+        x_all,
+        train_idx,
+        random_state,
+        geometry="sphere",
+        field_model="ridge",
+        include_radius=True,
+    ),
+    "manifold_euclidean_ridge": lambda x_train, x_all, train_idx, random_state: score_manifold_dynamics(
+        x_train,
+        x_all,
+        train_idx,
+        random_state,
+        geometry="euclidean",
+        field_model="ridge",
+        include_radius=False,
+    ),
+    "manifold_sphere_local": lambda x_train, x_all, train_idx, random_state: score_manifold_dynamics(
+        x_train,
+        x_all,
+        train_idx,
+        random_state,
+        geometry="sphere",
+        field_model="local",
+        include_radius=True,
+    ),
+    "manifold_sphere_local_no_radius": lambda x_train, x_all, train_idx, random_state: score_manifold_dynamics(
+        x_train,
+        x_all,
+        train_idx,
+        random_state,
+        geometry="sphere",
+        field_model="local",
+        include_radius=False,
+    ),
+    "manifold_euclidean_local": lambda x_train, x_all, train_idx, random_state: score_manifold_dynamics(
+        x_train,
+        x_all,
+        train_idx,
+        random_state,
+        geometry="euclidean",
+        field_model="local",
+        include_radius=False,
+    ),
     "dynsphere": score_dynsphere,
     "pendulum": score_dynsphere,
     **{
@@ -90,6 +221,79 @@ METHODS = {
         "knn", x_train, x_all, random_state
     ),
 }
+
+MANIFOLD_CONFIGURATIONS = {
+    "manifold_sphere_ridge": {
+        "geometry": "sphere",
+        "field_model": "ridge",
+        "include_radius": True,
+    },
+    "manifold_euclidean_ridge": {
+        "geometry": "euclidean",
+        "field_model": "ridge",
+        "include_radius": False,
+    },
+    "manifold_sphere_local": {
+        "geometry": "sphere",
+        "field_model": "local",
+        "include_radius": True,
+    },
+    "manifold_sphere_local_no_radius": {
+        "geometry": "sphere",
+        "field_model": "local",
+        "include_radius": False,
+    },
+    "manifold_euclidean_local": {
+        "geometry": "euclidean",
+        "field_model": "local",
+        "include_radius": False,
+    },
+}
+
+UNIFIED_CONFIGURATIONS = {
+    "unified_euclidean_joint": {"geometry": "euclidean", "factor": "joint"},
+    "unified_euclidean_observation": {"geometry": "euclidean", "factor": "observation"},
+    "unified_euclidean_dynamics": {"geometry": "euclidean", "factor": "dynamics"},
+    "unified_sphere_joint": {"geometry": "sphere", "factor": "joint"},
+    "unified_sphere_observation": {"geometry": "sphere", "factor": "observation"},
+    "unified_sphere_dynamics": {"geometry": "sphere", "factor": "dynamics"},
+}
+
+PREDICTIVE_CONFIGURATIONS = {
+    "identifiable_euclidean": {
+        "geometry": "euclidean",
+        "n_modes": 4,
+        "mode_specific_decoders": True,
+        "contrastive_weight": 0.5,
+        "diversity_weight": 0.05,
+        "balance_weight": 0.01,
+        "persistence_weight": 0.01,
+    },
+    "identifiable_euclidean_single": {
+        "geometry": "euclidean",
+        "n_modes": 1,
+        "mode_specific_decoders": True,
+        "contrastive_weight": 0.5,
+        "diversity_weight": 0.05,
+        "balance_weight": 0.01,
+        "persistence_weight": 0.01,
+    },
+    "predictive_euclidean": {"geometry": "euclidean", "n_modes": 4},
+    "predictive_sphere": {"geometry": "sphere", "n_modes": 4},
+    "predictive_euclidean_single": {"geometry": "euclidean", "n_modes": 1},
+}
+
+SEGMENT_CONFIGURATIONS = {
+    "segment_predictive_euclidean": {"rollout_epochs": 0},
+    "segment_multistep_euclidean": {"rollout_epochs": 10},
+    "segment_state_space_euclidean": {
+        "rollout_epochs": 10,
+        "probabilistic_rollout": True,
+    },
+}
+SEGMENT_METHODS = set(SEGMENT_CONFIGURATIONS)
+BOUNDARY_METHODS = {"boundary_change_point_euclidean"}
+SEMI_MARKOV_METHODS = {"semi_markov_change_point_euclidean"}
 
 
 LABEL_CANDIDATES = [
@@ -183,8 +387,9 @@ def metrics(labels: np.ndarray, scores: np.ndarray, include_vus: bool) -> dict[s
     if positives and positives < len(labels):
         out["auroc"] = float(roc_auc_score(labels, scores))
         out["auprc"] = float(average_precision_score(labels, scores))
-        from range_metrics import best_point_adjusted_f1, practical_range_metrics
+        from range_metrics import best_plain_f1, best_point_adjusted_f1, practical_range_metrics
 
+        out.update(best_plain_f1(labels, scores))
         out.update(best_point_adjusted_f1(labels, scores))
         out.update(practical_range_metrics(labels, scores))
         if include_vus:
@@ -205,6 +410,12 @@ def main() -> None:
     parser.add_argument("--max-test-rows", type=int, default=30000)
     parser.add_argument("--methods", nargs="+", default=["dynsphere", "dynsphere_pp", "iforest", "hbos", "copod"])
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--scores-out",
+        type=Path,
+        default=None,
+        help="Optional compressed NPZ containing labels, positions, and each successful score vector.",
+    )
     parser.add_argument("--random-state", type=int, default=37)
     parser.add_argument("--include-vus", action="store_true")
     args = parser.parse_args()
@@ -225,16 +436,87 @@ def main() -> None:
     x_train_all = x_train_df[common_features].to_numpy(dtype=float)
     x_test = x_test_df[common_features].to_numpy(dtype=float)
 
-    train_idx = np.flatnonzero(y_train_all == 0) if len(y_train_all) else np.arange(len(x_train_all))
-    x_train = x_train_all[train_idx]
+    train_positions = (
+        np.flatnonzero(y_train_all == 0)
+        if len(y_train_all)
+        else np.arange(len(x_train_all))
+    )
+    x_train = x_train_all[train_positions]
     x_train, _, train_stride = downsample(x_train, np.zeros(len(x_train), dtype=int), args.max_train_rows)
+    train_positions = train_positions[::train_stride]
+    test_positions = np.arange(len(x_test))
     x_test, y_test, test_stride = downsample(x_test, y_test, args.max_test_rows)
+    test_positions = test_positions[::test_stride]
 
     rows = []
+    score_vectors: dict[str, np.ndarray] = {}
+    unified_score_cache: dict[str, dict[str, np.ndarray]] = {}
     for method in args.methods:
         started = time.time()
         try:
-            scores = METHODS[method](x_train, x_test, np.arange(len(x_train)), args.random_state)
+            if method in SEMI_MARKOV_METHODS:
+                scores = score_semi_markov_change_point(
+                    x_train,
+                    x_test,
+                    train_positions,
+                    args.random_state,
+                    score_idx=test_positions,
+                )
+            elif method in BOUNDARY_METHODS:
+                scores = score_boundary_change_point(
+                    x_train,
+                    x_test,
+                    train_positions,
+                    args.random_state,
+                    score_idx=test_positions,
+                )
+            elif method in SEGMENT_METHODS:
+                scores = score_segment_predictive(
+                    x_train,
+                    x_test,
+                    train_positions,
+                    args.random_state,
+                    score_idx=test_positions,
+                    **SEGMENT_CONFIGURATIONS[method],
+                )
+            elif method in PREDICTIVE_CONFIGURATIONS:
+                scores = score_predictive_generative(
+                    x_train,
+                    x_test,
+                    train_positions,
+                    args.random_state,
+                    score_idx=test_positions,
+                    **PREDICTIVE_CONFIGURATIONS[method],
+                )
+            elif method in UNIFIED_CONFIGURATIONS:
+                configuration = UNIFIED_CONFIGURATIONS[method]
+                geometry = configuration["geometry"]
+                if geometry not in unified_score_cache:
+                    unified_score_cache[geometry] = score_unified_generative_factors(
+                        x_train,
+                        x_test,
+                        train_positions,
+                        args.random_state,
+                        score_idx=test_positions,
+                        geometry=geometry,
+                    )
+                scores = unified_score_cache[geometry][configuration["factor"]]
+            elif method in MANIFOLD_CONFIGURATIONS:
+                scores = score_manifold_dynamics(
+                    x_train,
+                    x_test,
+                    train_positions,
+                    args.random_state,
+                    score_idx=test_positions,
+                    **MANIFOLD_CONFIGURATIONS[method],
+                )
+            else:
+                scores = METHODS[method](
+                    x_train,
+                    x_test,
+                    np.arange(len(x_train)),
+                    args.random_state,
+                )
             row = {
                 "dataset": args.dataset,
                 "method": display_method(method),
@@ -248,6 +530,7 @@ def main() -> None:
                 "seconds": float(time.time() - started),
                 **metrics(y_test, scores, args.include_vus),
             }
+            score_vectors[method] = np.asarray(scores, dtype=float)
         except Exception as exc:  # noqa: BLE001
             row = {
                 "dataset": args.dataset,
@@ -271,6 +554,14 @@ def main() -> None:
         "rows": rows,
     }
     args.out.with_suffix(".json").write_text(json.dumps(summary, indent=2) + "\n")
+    if args.scores_out is not None:
+        args.scores_out.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(
+            args.scores_out,
+            labels=np.asarray(y_test, dtype=np.int8),
+            test_positions=np.asarray(test_positions, dtype=np.int64),
+            **score_vectors,
+        )
 
 
 if __name__ == "__main__":

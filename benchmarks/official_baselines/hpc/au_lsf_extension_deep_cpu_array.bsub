@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#BSUB -J "dynsphere-extension-deep-cpu[1-16]%4"
+#BSUB -q long
+#BSUB -n 2
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=16000]"
+#BSUB -W 48:00
+#BSUB -o logs/au-extension-deep-cpu-%J-%I.out
+#BSUB -e logs/au-extension-deep-cpu-%J-%I.err
+set -euo pipefail
+export DYNSPHERE_EXTENSION_GROUP=cpu
+exec bash "${DYNSPHERE_REPO:?Set DYNSPHERE_REPO}/benchmarks/official_baselines/hpc/run_extension_baselines.sh"

@@ -1,6 +1,137 @@
-[Official baseline and expanded evaluation protocol](benchmarks/official_baselines/README.md)
+# DynSphere: State and Motion Consistency for Multivariate Telemetry Anomaly Detection
 
-# DynSphere: Multi-Concept Dynamics for Contextual Anomaly Detection
+DynSphere evaluates state and motion consistency within normal operating
+concepts learned from multivariate telemetry. Each concept has ridge models
+that predict latent and standardized-feature acceleration from state and
+velocity. Robust training statistics scale the residuals and the remaining
+state, speed, and transition terms. The implementation supports spherical
+and Euclidean geometry with one or multiple concepts.
+
+The repository includes the current detector, evaluation protocols, tests,
+synthetic examples, and earlier research prototypes. The manuscript is
+maintained in a separate Overleaf repository. The project is under active
+research development; individual studies have distinct inputs, splits,
+score support, and aggregation rules.
+
+## Current implementation and evaluation
+
+| Configuration | Python class | Concepts |
+| --- | --- | ---: |
+| DynSphere-S4 | `MultiConceptPendulumDetector` | 4 |
+| DynSphere-S1 | `MultiConceptPendulumDetector` | 1 |
+| DynSphere-E4 | `MultiConceptEuclideanDetector` | 4 |
+| DynSphere-E1 | `MultiConceptEuclideanDetector` | 1 |
+
+Both classes are in [`pendulum_detector.py`](pendulum_detector.py). Their
+`decision_components()` method exposes the weighted score terms and the
+score before and after temporal propagation. Numerical derivatives and
+centered propagation use future observations, so the current configurations
+provide retrospective scoring. The separate neural predictors and
+window-conditioned prototypes retain their experimental status.
+
+The primary held-out study uses standardized partial AUROC through a 5%
+false-positive rate, with equal source-family weighting after seed and
+trajectory averaging. AP/AUPRC, AUROC, VUS-PR, and VUS-ROC provide additional
+summaries. Normal-calibrated thresholds are evaluated separately. Official
+VUS results require `vus==0.0.6`; buffered fallback values are diagnostic.
+
+| Study | Protocol and code |
+| --- | --- |
+| Five-family held-out telemetry | BATADAL, HAI-20.07, MSL, SMAP, and SMD; disjoint fitting, normal calibration, and test observations. See [`research/evaluation_protocols/`](research/evaluation_protocols/) and the [matched deep-comparison guide](research/submission_campaign/HPC_RUN_GUIDE.md). The 13-method matched comparison contains 59 trajectories after three DAGMM failures on one SMAP case. |
+| Corrected CPU baselines and aggregation | [Isolated recovery and matched aggregation](research/submission_recovery/README.md), preserving original attempts and documenting upstream normalization limitations. |
+| Exathlon/GHL/GutenTAG extension | [Extension preparation and evaluation](benchmarks/official_baselines/EXTENSION_EVALUATION.md). TSB-AD versions of Exathlon/GHL and independently generated GutenTAG examples have separately stated support. |
+| Source-native Exathlon | [Frozen execution-separated study](research/exathlon_native/README.md): four applications, five test executions, three seeds, ten configurations, 108 fits, and 150 score evaluations. Pointwise and segment-weighted VUS summaries use different, explicitly reported cohorts. |
+| Earlier research prototypes | [Window-conditioned pilot](research/window_dynsphere/README.md), [conditional-dynamics implementation notes](STRATEGY_A_IMPLEMENTATION.md), and the historical instructions below. |
+
+These studies are reported separately. Existing manifests, cached scores,
+failed attempts, and historical outputs should be preserved. Frozen runners
+verify source and input hashes; a changed checkout can require a new
+campaign identity. Several dated guides describe their status at creation
+and can contain references to jobs that have since completed.
+
+## Installation and tests
+
+For a fresh checkout, Python 3.11 is recommended for the controller environment.
+External baselines use their own pinned environments and Python versions;
+consult the [baseline setup guide](benchmarks/official_baselines/README.md)
+and [cluster execution guide](benchmarks/official_baselines/HPC_EXECUTION.md).
+The core test suite has also been checked in the existing Python 3.9 environment.
+
+```bash
+git clone https://github.com/rcorizzo/dynsphere.git
+cd dynsphere
+python3.11 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements.txt pytest
+OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m pytest tests -q
+```
+
+Install the optional official temporal metrics in a compatible environment:
+
+```bash
+.venv/bin/python -m pip install vus==0.0.6
+```
+
+Full baseline training is separate from the tests. The cluster guides include
+AU LSF and PLGrid Slurm runners. Submitting a runner starts computational
+jobs; no job is submitted by installation or by reading this README.
+
+## Algorithm-ready datasets
+
+The checkout includes project-generated contextual and distribution-preserving
+train/test splits and the 18 generated GutenTAG cases. Generation metadata,
+feature names, labels, and file hashes are retained where provided. The
+largest included dataset file is approximately 21 MiB. Earlier ensemble and
+heterogeneous stress datasets remain reproducible through their generator
+and are excluded from this publication snapshot.
+
+For third-party data, the following commands populate the paths expected by
+the loaders. They download source observations; each runner applies its own
+declared split and fitting-only preprocessing.
+
+```bash
+.venv/bin/python benchmarks/real_world_datasets/download_real_world_datasets.py --dataset batadal
+.venv/bin/python benchmarks/real_world_datasets/download_real_world_datasets.py --dataset hai_20_07
+.venv/bin/python benchmarks/tsb_ad_m/download_tsb_ad_m.py
+```
+
+The TSB-AD-M download supplies the selected MSL, SMAP, SMD, Exathlon, and GHL
+files. Source-native Exathlon uses a separate pinned release and preparation.
+PowerSystem requires manual archive extraction. See [dataset acquisition,
+expected layouts, attribution, and preparation](docs/DATASETS.md) for all
+sources, including generation and download-retry instructions.
+
+For an existing algorithm-ready train/test pair, the API is:
+
+```python
+from pendulum_detector import MultiConceptEuclideanDetector
+
+detector = MultiConceptEuclideanDetector(n_concepts=1, random_state=37)
+detector.fit(train_values, train_entity_ids)
+scores = detector.decision_function(test_values, test_entity_ids)
+components = detector.decision_components(test_values, test_entity_ids)
+```
+
+`train_values` and `test_values` are finite arrays with the same ordered
+feature columns. Fit on normal observations only. Entity identifiers must
+separate executions and uninterrupted segments. Labels, timestamps, and
+synthetic debug columns are excluded from model features. Higher scores
+indicate greater anomaly evidence. The detector fits its own feature scaler.
+
+Large result directories, fitted models, logs, environments, and downloaded
+external code are excluded from Git. Exact historical table regeneration
+requires the corresponding frozen manifests and score artifacts, which are
+maintained separately; the Git checkout alone is not a complete archive of
+all manuscript experiments. Some historical analysis scripts expect those
+artifacts at the documented paths.
+
+## Historical commands and exploratory variants
+
+The remaining sections preserve earlier instructions and result tables.
+Their metrics, splits, baseline implementations, and dataset counts belong
+to those earlier studies. Use the protocol guide above for the current
+held-out and source-native comparisons.
 
 This repository contains the code, synthetic benchmark, and experiment runners for the DynSphere paper. DynSphere studies anomaly
 detection for multivariate sequences going beyond pointwise feature rarity, where abnormality is defined by invalid trajectory dynamics.
@@ -38,10 +169,10 @@ detection for multivariate sequences going beyond pointwise feature rarity, wher
 
 ## Dataset Redistribution and Attribution
 
-The synthetic contextual benchmark in `data/contextual/` is generated by this
-project and is the only dataset intended to be committed with the code. Raw
-third-party datasets are excluded; use the download commands
-below to recreate the expected local layout.
+The generated contextual and distribution-preserving splits and the generated
+GutenTAG examples are included under `data/`. Raw third-party observations
+are excluded; use the download commands below and [dataset guide](docs/DATASETS.md)
+to recreate the expected local layout.
 
 Third-party sources used in the paper:
 
@@ -62,7 +193,9 @@ Third-party sources used in the paper:
 
 ## Environment
 
-The experiments were run with Python 3.9 on CPU.
+The earlier local experiments were run with Python 3.9 on CPU. Current
+controllers, external baseline environments, and GPU experiments have
+separately recorded dependencies and devices, as described above.
 
 Install the core dependencies:
 
@@ -554,9 +687,9 @@ specified by `generate_pendulum_dataset.py`; anomaly labels are assigned by the
 simulator according to the contextual anomaly mechanisms encoded in that script.
 There are therefore no annotators or annotation quality-control procedures.
 
-Raw third-party datasets are not redistributed, except for the generated
-contextual split under `data/contextual/`. Download links or scripts are listed
-above in `Dataset Redistribution and Attribution`.
+Raw third-party datasets are not redistributed. The generated examples under
+`data/` are included as described in [the dataset guide](docs/DATASETS.md).
+Download links or scripts for real observations are listed above.
 
 ### Dependencies, Code, and Models
 

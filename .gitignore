@@ -22,6 +22,7 @@ dist/
 *.egg-info/
 
 # Logs and temporary files
+/logs/
 *.log
 *.tmp
 *.bak

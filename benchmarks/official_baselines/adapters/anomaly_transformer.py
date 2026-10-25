@@ -51,6 +51,11 @@ def _kl(p, q):
     return torch.mean(torch.sum(p * (torch.log(p + 0.0001) - torch.log(q + 0.0001)), dim=-1), dim=1)
 
 
+def _epoch_learning_rate(initial_rate, epoch_index):
+    # The release adjusts the rate at the end of each one-based epoch.
+    return initial_rate * (0.5 ** max(0, epoch_index - 1))
+
+
 def official_backend(
     train: np.ndarray, test: np.ndarray, configuration: Mapping[str, object], seed: int
 ) -> BackendOutput:
@@ -83,11 +88,21 @@ def official_backend(
         n_heads=int(configuration.get("n_heads", 4)),
         e_layers=int(configuration.get("e_layers", 3)),
     ).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=float(configuration.get("lr", 1e-4)))
+    initial_rate = float(configuration.get("lr", 1e-4))
+    revision = str(configuration.get('training_revision', 'historical-v1'))
+    if revision not in ('historical-v1', 'released-budget-v2'):
+        raise ValueError(f'Unknown Anomaly Transformer training revision: {revision}')
+    optimizer = torch.optim.Adam(model.parameters(), lr=initial_rate)
     reconstruction = nn.MSELoss()
     k = float(configuration.get("k", 3.0))
     model.train()
-    for _ in range(int(configuration.get("epochs", 3))):
+    epochs = int(configuration.get('epochs', 3))
+    training_loss = []
+    for epoch in range(epochs):
+        if revision == 'released-budget-v2':
+            for group in optimizer.param_groups:
+                group['lr'] = _epoch_learning_rate(initial_rate, epoch)
+        epoch_losses = []
         for (batch,) in train_loader:
             batch = batch.to(device)
             optimizer.zero_grad()
@@ -108,6 +123,8 @@ def official_backend(
             (rec_loss - k * series_loss).backward(retain_graph=True)
             (rec_loss + k * prior_loss).backward()
             optimizer.step()
+            epoch_losses.append(float(rec_loss.detach().cpu()))
+        training_loss.append(float(np.mean(epoch_losses)))
     model.eval()
     criterion = nn.MSELoss(reduction="none")
     energies: list[np.ndarray] = []
@@ -135,6 +152,12 @@ def official_backend(
             "d_model": int(configuration.get("d_model", 128)),
             "device": str(device),
             "cpu_compatibility": cpu_compatibility,
+            "training_revision": revision,
+            "epochs": epochs,
+            "training_reconstruction_loss": training_loss,
+            "n_heads": int(configuration.get('n_heads', 4)),
+            "checkpoint_selection": 'fixed-final-epoch-no-test-access',
+            "score_alignment": 'last-position-of-overlapping-window',
         },
     )
 

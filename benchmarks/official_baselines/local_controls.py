@@ -7,6 +7,7 @@ from typing import Callable
 import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
+from sklearn.linear_model import Ridge
 
 from pendulum_detector import MultiConceptEuclideanDetector, MultiConceptPendulumDetector
 from predictive_generative_detector import PredictiveGenerativeDetector
@@ -71,6 +72,19 @@ def score_kmeans_distance(train: np.ndarray, test: np.ndarray, seed: int) -> Sco
         len(test),
         {"n_clusters": n_clusters, "n_init": 20, "score": "nearest-centroid-distance"},
     )
+
+
+def score_linear_ridge_ar1(train: np.ndarray, test: np.ndarray, seed: int) -> ScoreResult:
+    """Score one-step linear autoregressive residuals at their target row."""
+    train, test = _arrays(train, test)
+    model = Ridge(alpha=1.0).fit(train[:-1], train[1:])
+    scores = np.zeros(len(test), dtype=float)
+    if len(test) > 1:
+        scores[1:] = np.mean((test[1:] - model.predict(test[:-1])) ** 2, axis=1)
+    return _result(scores, len(test), {
+        "score": "mean-squared-one-step-residual", "ridge_alpha": 1.0,
+        "warmup_rows": 1, "prediction_lag": 1,
+    })
 
 
 def score_euclidean_predictor(train: np.ndarray, test: np.ndarray, seed: int) -> ScoreResult:
@@ -218,6 +232,7 @@ def score_one_regime_euclidean_dynsphere(
 
 
 LOCAL_SCORERS: dict[str, LocalScorer] = {
+    "linear_ridge_ar1": score_linear_ridge_ar1,
     "pca_reconstruction": score_pca_reconstruction,
     "kmeans_distance": score_kmeans_distance,
     "predictive_euclidean_single": score_euclidean_predictor,

@@ -125,6 +125,44 @@ def best_point_adjusted_f1(labels: np.ndarray, scores: np.ndarray, max_threshold
     return best
 
 
+def best_plain_f1(labels: np.ndarray, scores: np.ndarray, max_thresholds: int = 200) -> dict[str, float | None]:
+    """Return best pointwise F1 over score thresholds.
+
+    As with best point-adjusted F1, the threshold is selected with labeled
+    evaluation data and should be treated as a diagnostic upper bound unless a
+    separate validation set is used.
+    """
+    labels = np.asarray(labels).astype(int)
+    scores = normalize_scores(scores)
+    if labels.sum() == 0 or labels.sum() == len(labels):
+        return {"plain_f1": None, "plain_precision": None, "plain_recall": None, "plain_threshold": None}
+
+    unique_scores = np.unique(scores)
+    if len(unique_scores) > max_thresholds:
+        thresholds = np.quantile(scores, np.linspace(0.0, 1.0, max_thresholds))
+        thresholds = np.unique(thresholds)
+    else:
+        thresholds = unique_scores
+
+    best = {
+        "plain_f1": 0.0,
+        "plain_precision": 0.0,
+        "plain_recall": 0.0,
+        "plain_threshold": float(thresholds[0]),
+    }
+    for threshold in thresholds:
+        predictions = (scores >= threshold).astype(int)
+        f1, precision, recall = _binary_f1(labels, predictions)
+        if f1 > float(best["plain_f1"]):
+            best = {
+                "plain_f1": float(f1),
+                "plain_precision": float(precision),
+                "plain_recall": float(recall),
+                "plain_threshold": float(threshold),
+            }
+    return best
+
+
 def _top_budget_predictions(scores: np.ndarray, fraction: float) -> np.ndarray:
     scores = normalize_scores(scores)
     k = max(1, int(np.ceil(len(scores) * fraction)))

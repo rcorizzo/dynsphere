@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#BSUB -J dynsphere-cpu-recovery-pilot
+#BSUB -q long
+#BSUB -n 2
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=16000]"
+#BSUB -W 01:00
+#BSUB -o logs/au-recovery-pilot-%J.out
+#BSUB -e logs/au-recovery-pilot-%J.err
+set -euo pipefail
+module load git/2.40.0
+: "${DYNSPHERE_RECOVERY_REPO:?Set the isolated recovery checkout path}"
+cd "$DYNSPHERE_RECOVERY_REPO"
+export DYNSPHERE_DEVICE=cpu CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 LOKY_MAX_CPU_COUNT=1
+exec .venv/bin/python -m research.submission_recovery.run \
+  --families MSL --pilot --seeds 37 --timeout-seconds 1200

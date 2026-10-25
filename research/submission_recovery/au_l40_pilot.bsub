@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#BSUB -J dynsphere-l40-compatibility-pilot
+#BSUB -q normal
+#BSUB -gpu "num=1:gmodel=NVIDIAL40"
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=32000]"
+#BSUB -W 02:00
+#BSUB -o logs/au-l40-pilot-%J.out
+#BSUB -e logs/au-l40-pilot-%J.err
+set -euo pipefail
+module load git/2.40.0
+: "${DYNSPHERE_L40_PILOT_REPO:?Set the separate L40 pilot checkout}"
+cd "$DYNSPHERE_L40_PILOT_REPO"
+export DYNSPHERE_DEVICE=cuda OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 LOKY_MAX_CPU_COUNT=1 PYTHONUNBUFFERED=1
+pilot_root="$DYNSPHERE_L40_PILOT_REPO/results/l40_compatibility_20261025"
+mkdir -p "$pilot_root/hardware"
+nvidia-smi > "$pilot_root/hardware/nvidia-smi.txt"
+for method in mtad_gat catch tranad anomaly_transformer; do
+  "benchmarks/official_baselines/.envs/$method/bin/python" -c '
+import json,os,sys,torch
+assert torch.cuda.is_available(), "CUDA must be available; CPU fallback is prohibited"
+name=torch.cuda.get_device_name(0)
+assert "L40" in name, "The pilot must receive an L40 GPU"
+x=torch.randn((256,256),device="cuda")
+y=x@x
+torch.cuda.synchronize()
+assert bool(torch.isfinite(y).all().item()), "CUDA matrix operation returned invalid values"
+print(json.dumps({"method":sys.argv[1],"gpu":name,"torch":torch.__version__,
+ "compiled_cuda":torch.version.cuda,"visible_devices":os.environ.get("CUDA_VISIBLE_DEVICES"),
+ "gpu_memory_bytes":torch.cuda.get_device_properties(0).total_memory,
+ "job_id":os.environ.get("LSB_JOBID"),"host":os.uname().nodename,
+ "cuda_matrix_check":"passed"}))
+' "$method" > "$pilot_root/hardware/$method.json"
+  echo "CUDA check passed: $method"
+done
+exec .venv/bin/python -m research.submission_campaign.deep \
+  --methods mtad_gat catch tranad anomaly_transformer \
+  --families MSL --pilot --seeds 37 \
+  --timeout-seconds 1200 --output "$pilot_root"

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#BSUB -J "dynsphere-heldout[1-16]%4"
+#BSUB -q h100
+#BSUB -gpu "num=1:gmodel=NVIDIAH100PCIe"
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=32000]"
+#BSUB -W 48:00
+#BSUB -o logs/au-heldout-%J-%I.out
+#BSUB -e logs/au-heldout-%J-%I.err
+set -euo pipefail
+module load git/2.40.0
+: "${DYNSPHERE_REPO:?Set DYNSPHERE_REPO to the remote checkout}"
+cd "$DYNSPHERE_REPO"
+export DYNSPHERE_DEVICE=cuda OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 LOKY_MAX_CPU_COUNT=1
+read -r -a dynsphere_methods <<< "${DYNSPHERE_DEEP_METHODS:-mtad_gat catch tranad anomaly_transformer}"
+exec .venv/bin/python -m research.submission_campaign.deep \
+  --methods "${dynsphere_methods[@]}" \
+  --shard-index "$((LSB_JOBINDEX-1))" --shard-count 16

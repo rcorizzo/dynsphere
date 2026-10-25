@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+#BSUB -J "dynsphere-heldout-cpu[1-16]%4"
+#BSUB -q long
+#BSUB -n 2
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=16000]"
+#BSUB -W 48:00
+#BSUB -o logs/au-heldout-cpu-%J-%I.out
+#BSUB -e logs/au-heldout-cpu-%J-%I.err
+set -euo pipefail
+module load git/2.40.0
+: "${DYNSPHERE_REPO:?Set DYNSPHERE_REPO to the remote checkout}"
+cd "$DYNSPHERE_REPO"
+export DYNSPHERE_DEVICE=cpu OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 LOKY_MAX_CPU_COUNT=1
+exec .venv/bin/python -m research.submission_campaign.deep \
+  --methods dagmm omni_anomaly_tsb_ad \
+  --shard-index "$((LSB_JOBINDEX-1))" --shard-count 16

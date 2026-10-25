@@ -49,6 +49,13 @@ ANOMALY_TYPES = [
     "cross_concept_transition",
 ]
 
+DISTRIBUTION_PRESERVING_ANOMALY_TYPES = [
+    "segment_reversal",
+    "cyclic_phase_displacement",
+    "matched_splice",
+    "invalid_mode_transition",
+]
+
 
 def wrap_pi(x: np.ndarray | float) -> np.ndarray | float:
     return (x + math.pi) % (2.0 * math.pi) - math.pi
@@ -65,13 +72,12 @@ def latent_state(t: np.ndarray, regime_id: int, rng: np.random.Generator) -> tup
     phi += 0.012 * np.sin(0.009 * t + regime_id)
     phi = wrap_pi(phi)
 
-    dt = 1.0
-    theta_dot = np.gradient(theta, dt)
+    theta_dot = np.gradient(theta, t)
     phi_unwrapped = np.unwrap(phi)
-    phi_dot = np.gradient(phi_unwrapped, dt)
+    phi_dot = np.gradient(phi_unwrapped, t)
 
-    theta_ddot = np.gradient(theta_dot, dt)
-    phi_ddot = np.gradient(phi_dot, dt)
+    theta_ddot = np.gradient(theta_dot, t)
+    phi_ddot = np.gradient(phi_dot, t)
     return theta, phi, theta_dot, phi_dot, theta_ddot, phi_ddot
 
 
@@ -97,6 +103,7 @@ def observation_features(
     phi_ddot: np.ndarray,
     entity_bias: np.ndarray,
     rng: np.random.Generator,
+    noise_std: float = 0.018,
 ) -> np.ndarray:
     sx, sy, sz = spherical_cartesian(theta, phi)
     e = energy(theta, theta_dot, phi_dot)
@@ -134,7 +141,7 @@ def observation_features(
             3.0 * raw[:, 11],
         ]
     )
-    noise = rng.normal(0.0, 0.018, size=nonlinear.shape)
+    noise = rng.normal(0.0, noise_std, size=nonlinear.shape)
     return nonlinear + entity_bias + noise
 
 
@@ -186,8 +193,11 @@ def inject_anomalies(
     anomaly_fraction: float,
     allowed_anomaly_types: list[int] | None = None,
     anomaly_type_weights: list[float] | None = None,
+    times: np.ndarray | None = None,
 ) -> tuple[np.ndarray, ...]:
     n = len(theta)
+    if times is None:
+        times = np.arange(n, dtype=float)
     labels = np.zeros(n, dtype=int)
     anomaly_names = np.array(["none"] * n, dtype=object)
     target = max(1, int(n * anomaly_fraction))
@@ -249,8 +259,9 @@ def inject_anomalies(
             # High kinetic energy while staying near a common angular region.
             theta_dot[start:end] += rng.normal(0.16, 0.025, size=length) * rng.choice([-1.0, 1.0])
             phi_dot[start:end] += rng.normal(0.12, 0.025, size=length) * rng.choice([-1.0, 1.0])
-            theta_ddot[start:end] = np.gradient(theta_dot[max(0, start - 1) : min(n, end + 1)])[1 : length + 1]
-            phi_ddot[start:end] = np.gradient(phi_dot[max(0, start - 1) : min(n, end + 1)])[1 : length + 1]
+            window = slice(max(0, start - 1), min(n, end + 1))
+            theta_ddot[start:end] = np.gradient(theta_dot[window], times[window])[1 : length + 1]
+            phi_ddot[start:end] = np.gradient(phi_dot[window], times[window])[1 : length + 1]
         elif anomaly_type == 6:
             # Segment copied from a different normal concept, hard for static density methods.
             candidates = np.flatnonzero(schedule != schedule[start])
@@ -266,6 +277,113 @@ def inject_anomalies(
     return theta, phi, theta_dot, phi_dot, theta_ddot, phi_ddot, labels, anomaly_names
 
 
+def distribution_preserving_index_map(
+    features: np.ndarray,
+    schedule: np.ndarray,
+    rng: np.random.Generator,
+    anomaly_fraction: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Construct trajectory anomalies using only rows from the clean sequence.
+
+    The returned index map can be applied to both observed and latent arrays.
+    Consequently, every anomalous observation is exactly a clean observation;
+    only its temporal placement or ordering is abnormal.  A pointwise detector
+    therefore cannot exploit marginal support violations introduced by the
+    generator.
+    """
+
+    n = len(features)
+    if n != len(schedule):
+        raise ValueError("features and schedule must have equal length.")
+    if n < 24:
+        raise ValueError("At least 24 observations are required for distribution-preserving anomalies.")
+    if not 0.0 <= anomaly_fraction < 1.0:
+        raise ValueError("anomaly_fraction must be in [0, 1).")
+
+    index_map = np.arange(n)
+    labels = np.zeros(n, dtype=int)
+    anomaly_names = np.array(["none"] * n, dtype=object)
+    occupied = np.zeros(n, dtype=bool)
+    target = max(1, int(n * anomaly_fraction))
+    max_length = max(6, min(32, n // 8))
+    margin = min(40, max(4, n // 10))
+
+    def available_start(length: int) -> int | None:
+        valid = []
+        for start in range(margin, n - length - margin + 1):
+            lo = max(0, start - 5)
+            hi = min(n, start + length + 5)
+            if not occupied[lo:hi].any():
+                valid.append(start)
+        if not valid:
+            return None
+        return int(rng.choice(valid))
+
+    def candidate_starts(start: int, length: int, same_regime: bool) -> np.ndarray:
+        target_regime = schedule[start]
+        candidates: list[int] = []
+        for source in range(1, n - length):
+            if max(source, start) < min(source + length, start + length):
+                continue
+            source_regimes = schedule[source : source + length]
+            if same_regime:
+                valid_regime = np.all(source_regimes == target_regime)
+            else:
+                valid_regime = np.all(source_regimes != target_regime)
+            if valid_regime:
+                candidates.append(source)
+        return np.asarray(candidates, dtype=int)
+
+    attempts = 0
+    while labels.sum() < target and attempts < 10 * n:
+        attempts += 1
+        remaining = target - int(labels.sum())
+        length = int(rng.integers(6, max_length + 1))
+        if remaining < length:
+            # A two-row segment is the minimum meaningful temporal
+            # transformation.  This keeps the realized anomaly fraction close
+            # to its target without reintroducing the one-row cyclic-shift bug.
+            length = max(2, remaining)
+        start = available_start(length)
+        if start is None:
+            break
+        end = start + length
+        mechanism = str(rng.choice(DISTRIBUTION_PRESERVING_ANOMALY_TYPES))
+        source_indices: np.ndarray | None = None
+
+        if mechanism == "segment_reversal":
+            source_indices = np.arange(start, end)[::-1]
+        elif mechanism == "cyclic_phase_displacement":
+            shift = int(rng.integers(1, length))
+            source_indices = np.roll(np.arange(start, end), shift)
+        elif mechanism in {"matched_splice", "invalid_mode_transition"}:
+            candidates = candidate_starts(
+                start,
+                length,
+                same_regime=mechanism == "matched_splice",
+            )
+            if len(candidates):
+                # Select a boundary-matched source.  This makes the first
+                # anomalous sample locally plausible while the subsequent
+                # evolution or mode transition remains dynamically invalid.
+                boundary = features[start - 1]
+                distances = np.linalg.norm(features[candidates] - boundary, axis=1)
+                shortlist = np.argsort(distances)[: min(8, len(candidates))]
+                source = int(candidates[int(rng.choice(shortlist))])
+                source_indices = np.arange(source, source + length)
+
+        if source_indices is None:
+            continue
+        index_map[start:end] = source_indices
+        occupied[start:end] = True
+        labels[start:end] = 1
+        anomaly_names[start:end] = mechanism
+
+    if labels.sum() == 0:
+        raise RuntimeError("Unable to place any distribution-preserving anomaly segments.")
+    return index_map, labels, anomaly_names
+
+
 def generate_split(
     n_entities: int,
     n_steps: int,
@@ -274,10 +392,30 @@ def generate_split(
     include_anomalies: bool,
     allowed_anomaly_types: list[int] | None = None,
     anomaly_type_weights: list[float] | None = None,
+    distribution_preserving: bool = False,
+    observation_noise_std: float = 0.018,
+    sampling_interval: float = 1.0,
+    sampling_jitter: float = 0.0,
 ) -> list[dict[str, object]]:
+    if observation_noise_std < 0.0:
+        raise ValueError("observation_noise_std must be non-negative.")
+    if sampling_interval <= 0.0:
+        raise ValueError("sampling_interval must be positive.")
+    if not 0.0 <= sampling_jitter < 1.0:
+        raise ValueError("sampling_jitter must be in [0, 1).")
     rng = np.random.default_rng(seed)
     rows: list[dict[str, object]] = []
-    time = np.arange(n_steps, dtype=float)
+    if sampling_jitter > 0.0:
+        # Timestamp perturbations use a separate deterministic stream so that
+        # schedules, observation noise, and anomaly mechanisms remain paired
+        # with the regularly sampled condition for the same seed.
+        time_rng = np.random.default_rng(seed + 10_000_003)
+        increments = sampling_interval * (
+            1.0 + time_rng.uniform(-sampling_jitter, sampling_jitter, size=n_steps - 1)
+        )
+        time = np.concatenate([[0.0], np.cumsum(increments)])
+    else:
+        time = np.arange(n_steps, dtype=float) * sampling_interval
 
     latent_by_regime = [latent_state(time, rid, rng) for rid in range(len(REGIMES))]
 
@@ -288,12 +426,12 @@ def generate_split(
         theta = blend_segments([x[0] for x in latent_by_regime], schedule)
         phi_unwrapped = blend_segments([np.unwrap(x[1]) for x in latent_by_regime], schedule)
         phi = wrap_pi(phi_unwrapped)
-        theta_dot = np.gradient(theta)
-        phi_dot = np.gradient(phi_unwrapped)
-        theta_ddot = np.gradient(theta_dot)
-        phi_ddot = np.gradient(phi_dot)
+        theta_dot = np.gradient(theta, time)
+        phi_dot = np.gradient(phi_unwrapped, time)
+        theta_ddot = np.gradient(theta_dot, time)
+        phi_ddot = np.gradient(phi_dot, time)
 
-        if include_anomalies:
+        if include_anomalies and not distribution_preserving:
             anomaly_pack = inject_anomalies(
                 theta,
                 phi,
@@ -306,16 +444,42 @@ def generate_split(
                 anomaly_fraction,
                 allowed_anomaly_types,
                 anomaly_type_weights,
+                times=time,
             )
             theta, phi, theta_dot, phi_dot, theta_ddot, phi_ddot, labels, anomaly_names = anomaly_pack
         else:
             labels = np.zeros(n_steps, dtype=int)
             anomaly_names = np.array(["none"] * n_steps, dtype=object)
 
-        features = observation_features(theta, phi, theta_dot, phi_dot, theta_ddot, phi_ddot, entity_bias, rng)
+        features = observation_features(
+            theta,
+            phi,
+            theta_dot,
+            phi_dot,
+            theta_ddot,
+            phi_ddot,
+            entity_bias,
+            rng,
+            noise_std=observation_noise_std,
+        )
+        if include_anomalies and distribution_preserving:
+            index_map, labels, anomaly_names = distribution_preserving_index_map(
+                features,
+                schedule,
+                rng,
+                anomaly_fraction,
+            )
+            theta = theta[index_map]
+            phi = phi[index_map]
+            theta_dot = theta_dot[index_map]
+            phi_dot = phi_dot[index_map]
+            theta_ddot = theta_ddot[index_map]
+            phi_ddot = phi_ddot[index_map]
+            schedule = schedule[index_map]
+            features = features[index_map]
         for t in range(n_steps):
             row: dict[str, object] = {
-                "time": t,
+                "time": float(time[t]),
                 "entity_id": entity_id,
                 "regime_id": int(schedule[t]),
                 "regime_name": REGIMES[int(schedule[t])].name,
@@ -364,11 +528,24 @@ def main() -> None:
     parser.add_argument("--test-entities", type=int, default=12)
     parser.add_argument("--steps", type=int, default=2400)
     parser.add_argument("--test-anomaly-fraction", type=float, default=0.035)
+    parser.add_argument("--observation-noise-std", type=float, default=0.018)
+    parser.add_argument(
+        "--sampling-interval",
+        type=float,
+        default=1.0,
+        help="Mean physical interval between observations.",
+    )
+    parser.add_argument(
+        "--sampling-jitter",
+        type=float,
+        default=0.0,
+        help="Uniform relative timestamp jitter in [0, 1); zero gives regular sampling.",
+    )
     parser.add_argument(
         "--anomaly-profile",
-        choices=["mixed", "contextual", "heterogeneous", "ensemble_stress"],
+        choices=["mixed", "contextual", "heterogeneous", "ensemble_stress", "distribution_preserving"],
         default="mixed",
-        help="mixed keeps all anomaly types; contextual removes easy sensor/energy anomalies; heterogeneous emphasizes mixed local, static, and dynamic mechanisms; ensemble_stress emphasizes anomalies where score-fusion components should be complementary.",
+        help="mixed keeps all anomaly types; contextual removes easy sensor/energy anomalies; heterogeneous emphasizes mixed local, static, and dynamic mechanisms; ensemble_stress emphasizes anomalies where score-fusion components should be complementary; distribution_preserving creates anomalous trajectories exclusively from clean observed rows.",
     )
     args = parser.parse_args()
 
@@ -410,8 +587,21 @@ def main() -> None:
         description = (
             "Synthetic ensemble-stress benchmark dominated by short energy/local perturbations and a minority of trajectory-context anomalies."
         )
+    elif args.anomaly_profile == "distribution_preserving":
+        description = (
+            "Distribution-preserving trajectory benchmark in which anomalous segments contain only clean observed rows, reordered or spliced into dynamically invalid contexts."
+        )
 
-    train = generate_split(args.train_entities, args.steps, args.seed, 0.0, include_anomalies=False)
+    train = generate_split(
+        args.train_entities,
+        args.steps,
+        args.seed,
+        0.0,
+        include_anomalies=False,
+        observation_noise_std=args.observation_noise_std,
+        sampling_interval=args.sampling_interval,
+        sampling_jitter=args.sampling_jitter,
+    )
     test = generate_split(
         args.test_entities,
         args.steps,
@@ -420,6 +610,10 @@ def main() -> None:
         include_anomalies=True,
         allowed_anomaly_types=allowed_anomaly_types,
         anomaly_type_weights=anomaly_type_weights,
+        distribution_preserving=args.anomaly_profile == "distribution_preserving",
+        observation_noise_std=args.observation_noise_std,
+        sampling_interval=args.sampling_interval,
+        sampling_jitter=args.sampling_jitter,
     )
 
     train_path = out_dir / f"{args.name}_train.csv"
@@ -432,15 +626,22 @@ def main() -> None:
     metadata = {
         "description": description,
         "seed": args.seed,
+        "observation_noise_std": args.observation_noise_std,
+        "sampling_interval": args.sampling_interval,
+        "sampling_jitter": args.sampling_jitter,
         "anomaly_profile": args.anomaly_profile,
         "feature_columns": [f"x_{j:02d}" for j in range(12)],
         "label_column": "is_anomaly",
         "anomaly_type_column": "anomaly_type",
         "normal_regimes": [r.__dict__ for r in REGIMES],
-        "anomaly_types": ANOMALY_TYPES,
-        "allowed_anomaly_types": [ANOMALY_TYPES[i] for i in allowed_anomaly_types]
-        if allowed_anomaly_types is not None
-        else ANOMALY_TYPES[1:],
+        "anomaly_types": ANOMALY_TYPES + DISTRIBUTION_PRESERVING_ANOMALY_TYPES,
+        "allowed_anomaly_types": DISTRIBUTION_PRESERVING_ANOMALY_TYPES
+        if args.anomaly_profile == "distribution_preserving"
+        else (
+            [ANOMALY_TYPES[i] for i in allowed_anomaly_types]
+            if allowed_anomaly_types is not None
+            else ANOMALY_TYPES[1:]
+        ),
         "anomaly_type_weights": anomaly_type_weights,
         "train": summarize(train),
         "test": summarize(test),

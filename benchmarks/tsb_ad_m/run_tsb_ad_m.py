@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import sys
 import time
 from pathlib import Path
@@ -22,6 +23,12 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from pendulum_detector import MultiConceptPendulumDetector  # noqa: E402
+from manifold_dynamics_detector import ManifoldDynamicsDetector  # noqa: E402
+from unified_generative_detector import UnifiedGenerativeDetector  # noqa: E402
+from predictive_generative_detector import PredictiveGenerativeDetector  # noqa: E402
+from segment_predictive_detector import SegmentPredictiveDetector  # noqa: E402
+from boundary_change_point_detector import BoundaryChangePointDetector  # noqa: E402
+from semi_markov_change_point_detector import SemiMarkovChangePointDetector  # noqa: E402
 
 
 PYOD_METHODS = {"lof", "knn", "iforest", "hbos", "copod", "pca"}
@@ -59,6 +66,27 @@ PENDULUM_ABLATIONS = {
     "pendulum_no_concepts": {"n_concepts": 1, "transition_weight": 0.0},
 }
 ALL_METHODS = [
+    "semi_markov_change_point_euclidean",
+    "boundary_change_point_euclidean",
+    "segment_state_space_euclidean",
+    "segment_multistep_euclidean",
+    "segment_predictive_euclidean",
+    "identifiable_euclidean",
+    "identifiable_euclidean_single",
+    "predictive_euclidean",
+    "predictive_sphere",
+    "predictive_euclidean_single",
+    "unified_euclidean_joint",
+    "unified_euclidean_observation",
+    "unified_euclidean_dynamics",
+    "unified_sphere_joint",
+    "unified_sphere_observation",
+    "unified_sphere_dynamics",
+    "manifold_sphere_ridge",
+    "manifold_euclidean_ridge",
+    "manifold_sphere_local",
+    "manifold_sphere_local_no_radius",
+    "manifold_euclidean_local",
     "dynsphere",
     "pendulum",
     *sorted(PENDULUM_ABLATIONS),
@@ -81,6 +109,27 @@ ALL_METHODS = [
     "pca",
 ]
 METHOD_DISPLAY_NAMES = {
+    "semi_markov_change_point_euclidean": "SemiMarkovChangePoint-Euclidean",
+    "boundary_change_point_euclidean": "BoundaryChangePoint-Euclidean",
+    "segment_state_space_euclidean": "SegmentContinuity-StateSpace-Euclidean",
+    "segment_multistep_euclidean": "SegmentContinuity-Multistep-Euclidean",
+    "segment_predictive_euclidean": "SegmentContinuity-Euclidean",
+    "identifiable_euclidean": "IdentifiablePredictive-Euclidean",
+    "identifiable_euclidean_single": "IdentifiablePredictive-Euclidean-SingleMode",
+    "predictive_euclidean": "PredictiveGenerative-Euclidean",
+    "predictive_sphere": "PredictiveGenerative-Sphere",
+    "predictive_euclidean_single": "PredictiveGenerative-Euclidean-SingleMode",
+    "unified_euclidean_joint": "UnifiedGenerative-Euclidean-Joint",
+    "unified_euclidean_observation": "UnifiedGenerative-Euclidean-Observation",
+    "unified_euclidean_dynamics": "UnifiedGenerative-Euclidean-Dynamics",
+    "unified_sphere_joint": "UnifiedGenerative-Sphere-Joint",
+    "unified_sphere_observation": "UnifiedGenerative-Sphere-Observation",
+    "unified_sphere_dynamics": "UnifiedGenerative-Sphere-Dynamics",
+    "manifold_sphere_ridge": "ManifoldDynamics-Sphere-Ridge",
+    "manifold_euclidean_ridge": "ManifoldDynamics-Euclidean-Ridge",
+    "manifold_sphere_local": "ManifoldDynamics-Sphere-Local",
+    "manifold_sphere_local_no_radius": "ManifoldDynamics-Sphere-Local-NoRadius",
+    "manifold_euclidean_local": "ManifoldDynamics-Euclidean-Local",
     "dynsphere": "DynSphere",
     "pendulum": "DynSphere",
     "dynsphere_no_transition": "DynSphere-NoTransition",
@@ -183,8 +232,6 @@ def load_tsb_csv(path: Path) -> tuple[np.ndarray, np.ndarray]:
     features = df.drop(columns=[label_col]).select_dtypes(include=[np.number]).to_numpy(dtype=float)
     if features.ndim != 2 or features.shape[1] < 2:
         raise ValueError(f"{path} is not multivariate after loading: shape={features.shape}")
-    if len(np.unique(labels)) < 2:
-        raise ValueError(f"{path} has only one label class; AUROC/AUPRC are undefined")
     return features, labels
 
 
@@ -218,6 +265,29 @@ def train_indices(labels: np.ndarray, fit_mode: str, min_train: int) -> np.ndarr
 
     if len(idx) < min_train:
         raise ValueError(f"Only {len(idx)} training rows available; need at least {min_train}")
+    return idx
+
+
+def declared_prefix_indices(
+    path: Path,
+    labels: np.ndarray,
+    min_train: int,
+    source_stride: int = 1,
+) -> np.ndarray:
+    """Use the official training-prefix length encoded by TSB-AD-M filenames."""
+
+    match = re.search(r"_tr_(\d+)_", path.name)
+    if match is None:
+        raise ValueError(f"No declared training prefix found in filename: {path.name}")
+    if source_stride < 1:
+        raise ValueError("source_stride must be positive")
+    # Downsampling retains source rows 0, stride, 2*stride, ... . The number
+    # of retained rows that belong to the declared original prefix is ceil.
+    declared_rows = int(match.group(1))
+    end = min((declared_rows + source_stride - 1) // source_stride, len(labels))
+    idx = np.arange(end)
+    if len(idx) < min_train:
+        raise ValueError(f"Declared prefix has {len(idx)} rows; need at least {min_train}")
     return idx
 
 
@@ -300,6 +370,415 @@ def score_dynsphere(
     return model.decision_function(x_all, all_entities, np.arange(len(x_all)))
 
 
+def score_manifold_dynamics(
+    x_train: np.ndarray,
+    x_all: np.ndarray,
+    train_idx: np.ndarray,
+    random_state: int,
+    *,
+    geometry: str,
+    field_model: str,
+    include_radius: bool,
+    score_idx: np.ndarray | None = None,
+) -> np.ndarray:
+    """Fit Strategy A while preserving discontinuous normal training segments."""
+
+    train_idx = np.asarray(train_idx, dtype=float)
+    if len(train_idx) != len(x_train):
+        raise ValueError("train_idx and x_train must have equal length.")
+    positive_steps = np.diff(train_idx)
+    positive_steps = positive_steps[positive_steps > 0.0]
+    nominal_step = float(np.min(positive_steps)) if len(positive_steps) else 1.0
+    normalized_time = (train_idx - train_idx[0]) / nominal_step
+    discontinuity = np.concatenate(
+        [[False], ~np.isclose(np.diff(normalized_time), 1.0)]
+    )
+    train_entities = np.cumsum(discontinuity).astype(int)
+    segment_lengths = np.bincount(train_entities)
+    if np.any(segment_lengths < 5):
+        # Very short clean islands cannot support chronological calibration.
+        # Excluding them is preferable to connecting them across attack gaps.
+        keep_entities = np.flatnonzero(segment_lengths >= 5)
+        keep = np.isin(train_entities, keep_entities)
+        x_train = x_train[keep]
+        train_idx = train_idx[keep]
+        old_entities = train_entities[keep]
+        _, train_entities = np.unique(old_entities, return_inverse=True)
+    if len(x_train) < 16:
+        raise ValueError("Fewer than 16 sequential normal training rows remain.")
+
+    model = ManifoldDynamicsDetector(
+        geometry=geometry,
+        field_model=field_model,
+        include_radius=include_radius,
+        latent_dim=min(5, x_train.shape[1]),
+        n_modes=4,
+        local_neighbors=64,
+        calibration_fraction=0.2,
+        random_state=random_state,
+    )
+    model.fit(x_train, train_entities, train_idx)
+    score_times = (
+        np.arange(len(x_all), dtype=float)
+        if score_idx is None
+        else np.asarray(score_idx, dtype=float)
+    )
+    if len(score_times) != len(x_all):
+        raise ValueError("score_idx and x_all must have equal length.")
+    return model.decision_function(
+        x_all,
+        np.zeros(len(x_all), dtype=int),
+        score_times,
+    )
+
+
+def score_unified_generative(
+    x_train: np.ndarray,
+    x_all: np.ndarray,
+    train_idx: np.ndarray,
+    random_state: int,
+    *,
+    geometry: str,
+    score_idx: np.ndarray | None = None,
+    epochs: int = 15,
+    score_factor: str = "joint",
+) -> np.ndarray:
+    """Fit the joint model and return one exact likelihood factor."""
+
+    return score_unified_generative_factors(
+        x_train,
+        x_all,
+        train_idx,
+        random_state,
+        geometry=geometry,
+        score_idx=score_idx,
+        epochs=epochs,
+    )[score_factor]
+
+
+def score_unified_generative_factors(
+    x_train: np.ndarray,
+    x_all: np.ndarray,
+    train_idx: np.ndarray,
+    random_state: int,
+    *,
+    geometry: str,
+    score_idx: np.ndarray | None = None,
+    epochs: int = 15,
+) -> dict[str, np.ndarray]:
+    """Fit once and score the joint, observation, and dynamics factors."""
+
+    train_idx = np.asarray(train_idx, dtype=float)
+    if len(train_idx) != len(x_train):
+        raise ValueError("train_idx and x_train must have equal length.")
+    positive_steps = np.diff(train_idx)
+    positive_steps = positive_steps[positive_steps > 0.0]
+    nominal_step = float(np.min(positive_steps)) if len(positive_steps) else 1.0
+    normalized_time = (train_idx - train_idx[0]) / nominal_step
+    discontinuity = np.concatenate(
+        [[False], ~np.isclose(np.diff(normalized_time), 1.0)]
+    )
+    train_entities = np.cumsum(discontinuity).astype(int)
+    segment_lengths = np.bincount(train_entities)
+    keep_entities = np.flatnonzero(segment_lengths >= 10)
+    keep = np.isin(train_entities, keep_entities)
+    x_train = x_train[keep]
+    train_idx = train_idx[keep]
+    old_entities = train_entities[keep]
+    _, train_entities = np.unique(old_entities, return_inverse=True)
+    if len(x_train) < 20 or len(keep_entities) == 0:
+        raise ValueError("Fewer than 20 sequential normal training rows remain.")
+
+    model = UnifiedGenerativeDetector(
+        geometry=geometry,
+        latent_dim=max(2, min(6, x_train.shape[1])),
+        hidden_dim=48,
+        n_modes=4,
+        epochs=epochs,
+        sequence_length=128,
+        calibration_fraction=0.2,
+        random_state=random_state,
+    )
+    model.fit(x_train, train_entities, train_idx)
+    score_times = (
+        np.arange(len(x_all), dtype=float)
+        if score_idx is None
+        else np.asarray(score_idx, dtype=float)
+    )
+    if len(score_times) != len(x_all):
+        raise ValueError("score_idx and x_all must have equal length.")
+    score_entities = np.zeros(len(x_all), dtype=int)
+    return {
+        factor: model.decision_function(
+            x_all,
+            score_entities,
+            score_times,
+            score_factor=factor,
+        )
+        for factor in ("joint", "observation", "dynamics")
+    }
+
+
+def score_predictive_generative(
+    x_train: np.ndarray,
+    x_all: np.ndarray,
+    train_idx: np.ndarray,
+    random_state: int,
+    *,
+    geometry: str,
+    n_modes: int = 4,
+    score_idx: np.ndarray | None = None,
+    epochs: int = 15,
+    mode_specific_decoders: bool = False,
+    contrastive_weight: float = 0.0,
+    contrastive_margin: float = 1.0,
+    diversity_weight: float = 0.0,
+    diversity_margin: float = 0.5,
+    balance_weight: float = 0.0,
+    persistence_weight: float = 0.0,
+) -> np.ndarray:
+    """Fit the switching next-observation likelihood on clean segments."""
+
+    train_idx = np.asarray(train_idx, dtype=float)
+    if len(train_idx) != len(x_train):
+        raise ValueError("train_idx and x_train must have equal length.")
+    positive_steps = np.diff(train_idx)
+    positive_steps = positive_steps[positive_steps > 0.0]
+    nominal_step = float(np.min(positive_steps)) if len(positive_steps) else 1.0
+    normalized_time = (train_idx - train_idx[0]) / nominal_step
+    discontinuity = np.concatenate(
+        [[False], ~np.isclose(np.diff(normalized_time), 1.0)]
+    )
+    train_entities = np.cumsum(discontinuity).astype(int)
+    segment_lengths = np.bincount(train_entities)
+    keep_entities = np.flatnonzero(segment_lengths >= 10)
+    keep = np.isin(train_entities, keep_entities)
+    x_train = x_train[keep]
+    train_idx = train_idx[keep]
+    old_entities = train_entities[keep]
+    _, train_entities = np.unique(old_entities, return_inverse=True)
+    if len(x_train) < 20 or len(keep_entities) == 0:
+        raise ValueError("Fewer than 20 sequential normal training rows remain.")
+
+    model = PredictiveGenerativeDetector(
+        geometry=geometry,
+        latent_dim=min(6, x_train.shape[1]),
+        hidden_dim=48,
+        n_modes=n_modes,
+        epochs=epochs,
+        sequence_length=128,
+        mode_specific_decoders=mode_specific_decoders,
+        contrastive_weight=contrastive_weight,
+        contrastive_margin=contrastive_margin,
+        diversity_weight=diversity_weight,
+        diversity_margin=diversity_margin,
+        balance_weight=balance_weight,
+        persistence_weight=persistence_weight,
+        calibration_fraction=0.2,
+        random_state=random_state,
+    )
+    model.fit(x_train, train_entities, train_idx)
+    score_times = (
+        np.arange(len(x_all), dtype=float)
+        if score_idx is None
+        else np.asarray(score_idx, dtype=float)
+    )
+    if len(score_times) != len(x_all):
+        raise ValueError("score_idx and x_all must have equal length.")
+    return model.decision_function(
+        x_all,
+        np.zeros(len(x_all), dtype=int),
+        score_times,
+    )
+
+
+def score_segment_predictive(
+    x_train: np.ndarray,
+    x_all: np.ndarray,
+    train_idx: np.ndarray,
+    random_state: int,
+    *,
+    score_idx: np.ndarray | None = None,
+    epochs: int = 15,
+    horizons: tuple[int, ...] = (2, 4, 8, 16, 32),
+    rollout_epochs: int = 0,
+    probabilistic_rollout: bool = False,
+) -> np.ndarray:
+    """Fit a single-mode predictor and scan free-running segment likelihoods."""
+
+    train_idx = np.asarray(train_idx, dtype=float)
+    if len(train_idx) != len(x_train):
+        raise ValueError("train_idx and x_train must have equal length.")
+    positive_steps = np.diff(train_idx)
+    positive_steps = positive_steps[positive_steps > 0.0]
+    nominal_step = float(np.min(positive_steps)) if len(positive_steps) else 1.0
+    normalized_time = (train_idx - train_idx[0]) / nominal_step
+    discontinuity = np.concatenate(
+        [[False], ~np.isclose(np.diff(normalized_time), 1.0)]
+    )
+    train_entities = np.cumsum(discontinuity).astype(int)
+    segment_lengths = np.bincount(train_entities)
+    minimum_length = max(10, max(horizons) + 3)
+    keep_entities = np.flatnonzero(segment_lengths >= minimum_length)
+    keep = np.isin(train_entities, keep_entities)
+    x_train = x_train[keep]
+    train_idx = train_idx[keep]
+    old_entities = train_entities[keep]
+    _, train_entities = np.unique(old_entities, return_inverse=True)
+    if len(x_train) < 2 * minimum_length or len(keep_entities) == 0:
+        raise ValueError("Insufficient sequential normal training rows for segment scoring.")
+
+    model = SegmentPredictiveDetector(
+        horizons=horizons,
+        geometry="euclidean",
+        latent_dim=min(6, x_train.shape[1]),
+        hidden_dim=48,
+        epochs=epochs,
+        rollout_epochs=rollout_epochs,
+        probabilistic_rollout=probabilistic_rollout,
+        sequence_length=128,
+        calibration_fraction=0.2,
+        random_state=random_state,
+    )
+    model.fit(x_train, train_entities, train_idx)
+    score_times = (
+        np.arange(len(x_all), dtype=float)
+        if score_idx is None
+        else np.asarray(score_idx, dtype=float)
+    )
+    if len(score_times) != len(x_all):
+        raise ValueError("score_idx and x_all must have equal length.")
+    return model.decision_function(
+        x_all,
+        np.zeros(len(x_all), dtype=int),
+        score_times,
+    )
+
+
+def score_boundary_change_point(
+    x_train: np.ndarray,
+    x_all: np.ndarray,
+    train_idx: np.ndarray,
+    random_state: int,
+    *,
+    score_idx: np.ndarray | None = None,
+    epochs: int = 15,
+    horizons: tuple[int, ...] = (1, 2, 4, 8, 16, 32),
+    rollout_epochs: int = 10,
+) -> np.ndarray:
+    """Fit the continuation-versus-reset change-point likelihood ratio."""
+
+    train_idx = np.asarray(train_idx, dtype=float)
+    if len(train_idx) != len(x_train):
+        raise ValueError("train_idx and x_train must have equal length.")
+    positive_steps = np.diff(train_idx)
+    positive_steps = positive_steps[positive_steps > 0.0]
+    nominal_step = float(np.min(positive_steps)) if len(positive_steps) else 1.0
+    normalized_time = (train_idx - train_idx[0]) / nominal_step
+    discontinuity = np.concatenate(
+        [[False], ~np.isclose(np.diff(normalized_time), 1.0)]
+    )
+    train_entities = np.cumsum(discontinuity).astype(int)
+    minimum_length = max(10, max(horizons) + 3)
+    segment_lengths = np.bincount(train_entities)
+    keep_entities = np.flatnonzero(segment_lengths >= minimum_length)
+    keep = np.isin(train_entities, keep_entities)
+    x_train = x_train[keep]
+    train_idx = train_idx[keep]
+    old_entities = train_entities[keep]
+    _, train_entities = np.unique(old_entities, return_inverse=True)
+    if len(x_train) < 2 * minimum_length or len(keep_entities) == 0:
+        raise ValueError("Insufficient sequential normal training rows for boundary scoring.")
+
+    model = BoundaryChangePointDetector(
+        horizons=horizons,
+        latent_dim=max(2, min(6, x_train.shape[1])),
+        hidden_dim=48,
+        epochs=epochs,
+        sequence_length=128,
+        rollout_epochs=rollout_epochs,
+        calibration_fraction=0.2,
+        random_state=random_state,
+    )
+    model.fit(x_train, train_entities, train_idx)
+    score_times = (
+        np.arange(len(x_all), dtype=float)
+        if score_idx is None
+        else np.asarray(score_idx, dtype=float)
+    )
+    if len(score_times) != len(x_all):
+        raise ValueError("score_idx and x_all must have equal length.")
+    return model.decision_function(
+        x_all,
+        np.zeros(len(x_all), dtype=int),
+        score_times,
+    )
+
+
+def score_semi_markov_change_point(
+    x_train: np.ndarray,
+    x_all: np.ndarray,
+    train_idx: np.ndarray,
+    random_state: int,
+    *,
+    score_idx: np.ndarray | None = None,
+    epochs: int = 15,
+    rollout_epochs: int = 10,
+    max_duration: int = 32,
+    mean_duration: float = 16.0,
+) -> np.ndarray:
+    """Fit the label-free semi-Markov active-event posterior."""
+
+    train_idx = np.asarray(train_idx, dtype=float)
+    if len(train_idx) != len(x_train):
+        raise ValueError("train_idx and x_train must have equal length.")
+    positive_steps = np.diff(train_idx)
+    positive_steps = positive_steps[positive_steps > 0.0]
+    nominal_step = float(np.min(positive_steps)) if len(positive_steps) else 1.0
+    normalized_time = (train_idx - train_idx[0]) / nominal_step
+    discontinuity = np.concatenate(
+        [[False], ~np.isclose(np.diff(normalized_time), 1.0)]
+    )
+    train_entities = np.cumsum(discontinuity).astype(int)
+    minimum_length = max(10, max_duration + 3)
+    segment_lengths = np.bincount(train_entities)
+    keep_entities = np.flatnonzero(segment_lengths >= minimum_length)
+    keep = np.isin(train_entities, keep_entities)
+    x_train = x_train[keep]
+    train_idx = train_idx[keep]
+    old_entities = train_entities[keep]
+    _, train_entities = np.unique(old_entities, return_inverse=True)
+    if len(x_train) < 2 * minimum_length or len(keep_entities) == 0:
+        raise ValueError(
+            "Insufficient sequential normal training rows for semi-Markov scoring."
+        )
+
+    model = SemiMarkovChangePointDetector(
+        max_duration=max_duration,
+        mean_duration=mean_duration,
+        latent_dim=max(2, min(6, x_train.shape[1])),
+        hidden_dim=48,
+        epochs=epochs,
+        sequence_length=128,
+        rollout_epochs=rollout_epochs,
+        calibration_fraction=0.2,
+        random_state=random_state,
+    )
+    model.fit(x_train, train_entities, train_idx)
+    score_times = (
+        np.arange(len(x_all), dtype=float)
+        if score_idx is None
+        else np.asarray(score_idx, dtype=float)
+    )
+    if len(score_times) != len(x_all):
+        raise ValueError("score_idx and x_all must have equal length.")
+    return model.decision_function(
+        x_all,
+        np.zeros(len(x_all), dtype=int),
+        score_times,
+    )
+
+
 def score_sequence_ae(x_train: np.ndarray, x_all: np.ndarray, random_state: int) -> np.ndarray:
     from neural_baselines import SequenceAutoencoderDetector
 
@@ -368,6 +847,116 @@ def score_dynsphere_pp(
 
 
 def method_scorer(method: str) -> Callable[[np.ndarray, np.ndarray, np.ndarray, int], np.ndarray]:
+    if method == "semi_markov_change_point_euclidean":
+        return score_semi_markov_change_point
+    if method == "boundary_change_point_euclidean":
+        return score_boundary_change_point
+    if method == "segment_state_space_euclidean":
+        return lambda x_train, x_all, train_idx, random_state: score_segment_predictive(
+            x_train,
+            x_all,
+            train_idx,
+            random_state,
+            rollout_epochs=10,
+            probabilistic_rollout=True,
+        )
+    if method == "segment_multistep_euclidean":
+        return lambda x_train, x_all, train_idx, random_state: score_segment_predictive(
+            x_train,
+            x_all,
+            train_idx,
+            random_state,
+            rollout_epochs=10,
+        )
+    if method == "segment_predictive_euclidean":
+        return score_segment_predictive
+    identifiable_common = {
+        "geometry": "euclidean",
+        "mode_specific_decoders": True,
+        "contrastive_weight": 0.5,
+        "contrastive_margin": 1.0,
+        "diversity_weight": 0.05,
+        "diversity_margin": 0.5,
+        "balance_weight": 0.01,
+        "persistence_weight": 0.01,
+    }
+    identifiable_configurations = {
+        "identifiable_euclidean": {**identifiable_common, "n_modes": 4},
+        "identifiable_euclidean_single": {**identifiable_common, "n_modes": 1},
+    }
+    if method in identifiable_configurations:
+        configuration = identifiable_configurations[method]
+        return lambda x_train, x_all, train_idx, random_state: score_predictive_generative(
+            x_train,
+            x_all,
+            train_idx,
+            random_state,
+            **configuration,
+        )
+    predictive_configurations = {
+        "predictive_euclidean": {"geometry": "euclidean", "n_modes": 4},
+        "predictive_sphere": {"geometry": "sphere", "n_modes": 4},
+        "predictive_euclidean_single": {"geometry": "euclidean", "n_modes": 1},
+    }
+    if method in predictive_configurations:
+        configuration = predictive_configurations[method]
+        return lambda x_train, x_all, train_idx, random_state: score_predictive_generative(
+            x_train,
+            x_all,
+            train_idx,
+            random_state,
+            **configuration,
+        )
+    unified_match = re.fullmatch(
+        r"unified_(euclidean|sphere)_(joint|observation|dynamics)",
+        method,
+    )
+    if unified_match is not None:
+        geometry, factor = unified_match.groups()
+        return lambda x_train, x_all, train_idx, random_state: score_unified_generative(
+            x_train,
+            x_all,
+            train_idx,
+            random_state,
+            geometry=geometry,
+            score_factor=factor,
+        )
+    manifold_configurations = {
+        "manifold_sphere_ridge": {
+            "geometry": "sphere",
+            "field_model": "ridge",
+            "include_radius": True,
+        },
+        "manifold_euclidean_ridge": {
+            "geometry": "euclidean",
+            "field_model": "ridge",
+            "include_radius": False,
+        },
+        "manifold_sphere_local": {
+            "geometry": "sphere",
+            "field_model": "local",
+            "include_radius": True,
+        },
+        "manifold_sphere_local_no_radius": {
+            "geometry": "sphere",
+            "field_model": "local",
+            "include_radius": False,
+        },
+        "manifold_euclidean_local": {
+            "geometry": "euclidean",
+            "field_model": "local",
+            "include_radius": False,
+        },
+    }
+    if method in manifold_configurations:
+        configuration = manifold_configurations[method]
+        return lambda x_train, x_all, train_idx, random_state: score_manifold_dynamics(
+            x_train,
+            x_all,
+            train_idx,
+            random_state,
+            **configuration,
+        )
     if method in {"dynsphere", "pendulum"}:
         return score_dynsphere
     if method in PENDULUM_ABLATIONS:
@@ -464,7 +1053,11 @@ def main() -> None:
     parser.add_argument("--data-dir", default=base_dir / "data" / "TSB-AD-M")
     parser.add_argument("--out-dir", default=base_dir / "results")
     parser.add_argument("--methods", nargs="+", default=["dynsphere", "sequence_ae", "dynsphere_ae"])
-    parser.add_argument("--fit-mode", choices=["all", "prefix", "oracle-clean"], default="all")
+    parser.add_argument(
+        "--fit-mode",
+        choices=["all", "prefix", "declared-prefix", "oracle-clean"],
+        default="all",
+    )
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--min-train", type=int, default=64)
     parser.add_argument("--random-state", type=int, default=37)
@@ -607,7 +1200,16 @@ def main() -> None:
                     f"(stride={downsample_stride})",
                     flush=True,
                 )
-            idx = train_indices(labels, args.fit_mode, args.min_train)
+            idx = (
+                declared_prefix_indices(
+                    csv_path,
+                    labels,
+                    args.min_train,
+                    source_stride=downsample_stride,
+                )
+                if args.fit_mode == "declared-prefix"
+                else train_indices(labels, args.fit_mode, args.min_train)
+            )
         except Exception as exc:
             for method in methods:
                 rows.append(

@@ -1,0 +1,195 @@
+{
+  "cases": [
+    {
+      "case_name": "frequency-g101",
+      "family": "GutenTAG",
+      "generation_seed": 101,
+      "mechanism": "frequency",
+      "test": "generation-101/frequency/test.csv",
+      "test_sha256": "1ba6ed03bec52d04abef593a6443de68bc6b410159826ad33ee76f093f128807",
+      "train": "generation-101/frequency/train_no_anomaly.csv",
+      "train_sha256": "98c9b7a5638c2ff9db94837a09b273237210a202c3b7f9648b5f693127d88207"
+    },
+    {
+      "case_name": "pattern-shift-g101",
+      "family": "GutenTAG",
+      "generation_seed": 101,
+      "mechanism": "pattern-shift",
+      "test": "generation-101/pattern-shift/test.csv",
+      "test_sha256": "bcdc635994054751c096a8708a502e213999138717f1a5e02278219c5a62fa7e",
+      "train": "generation-101/pattern-shift/train_no_anomaly.csv",
+      "train_sha256": "8bb1c52edf36a0fd0fb16dd25d55033b96dc0d56f8856ed612f2b97338402b31"
+    },
+    {
+      "case_name": "mode-correlation-g101",
+      "family": "GutenTAG",
+      "generation_seed": 101,
+      "mechanism": "mode-correlation",
+      "test": "generation-101/mode-correlation/test.csv",
+      "test_sha256": "71c49023c8c9ed781813d70c529c34738ab3769ad0de29610068bb8ed940bc26",
+      "train": "generation-101/mode-correlation/train_no_anomaly.csv",
+      "train_sha256": "8e831ef0206eda39f70edee29a481ed9aec62c4e688dae6281dbeaf261a27372"
+    },
+    {
+      "case_name": "amplitude-g101",
+      "family": "GutenTAG",
+      "generation_seed": 101,
+      "mechanism": "amplitude",
+      "test": "generation-101/amplitude/test.csv",
+      "test_sha256": "ea04049ef0f722ba73f073a671dbb02e44c770b727bf7d8f20f15a222ea62c2e",
+      "train": "generation-101/amplitude/train_no_anomaly.csv",
+      "train_sha256": "56457f2467a34410cde92abbe4b4e925d46f69d026931ee2664f07b5f2655f07"
+    },
+    {
+      "case_name": "mean-g101",
+      "family": "GutenTAG",
+      "generation_seed": 101,
+      "mechanism": "mean",
+      "test": "generation-101/mean/test.csv",
+      "test_sha256": "718f7f18539b55dca22b62b6451f769aece630c2b6634651657e57b0dbf93330",
+      "train": "generation-101/mean/train_no_anomaly.csv",
+      "train_sha256": "46f4f772198c8f19dfae54ccad838f4495e319d8145f61a06ce1a341b93213d2"
+    },
+    {
+      "case_name": "variance-g101",
+      "family": "GutenTAG",
+      "generation_seed": 101,
+      "mechanism": "variance",
+      "test": "generation-101/variance/test.csv",
+      "test_sha256": "2322471b89721279bc70186907db7fbf3780ee748fb6c9b928e816d624b1b4a4",
+      "train": "generation-101/variance/train_no_anomaly.csv",
+      "train_sha256": "b7b184c3f843ace7f266d015430bc3d1bc0c3a519c40493b04a0ae5a05461f59"
+    },
+    {
+      "case_name": "frequency-g102",
+      "family": "GutenTAG",
+      "generation_seed": 102,
+      "mechanism": "frequency",
+      "test": "generation-102/frequency/test.csv",
+      "test_sha256": "59623c5c0db010666e581ada362f702da246458346da9e2fa39849d1505eb795",
+      "train": "generation-102/frequency/train_no_anomaly.csv",
+      "train_sha256": "6cefe2824d74614e6e1d52b6f336718aa7d8fd2fd6f20c7a71f1a1520b15a747"
+    },
+    {
+      "case_name": "pattern-shift-g102",
+      "family": "GutenTAG",
+      "generation_seed": 102,
+      "mechanism": "pattern-shift",
+      "test": "generation-102/pattern-shift/test.csv",
+      "test_sha256": "aa1b2b66a25ea58e5f97771f340bd8b47ef4f2854677959d66fba9657f71b53f",
+      "train": "generation-102/pattern-shift/train_no_anomaly.csv",
+      "train_sha256": "826144b301dc2aad1f38cf6ff0338d4df75c258dcfbefe01453ab6f89e76f7fd"
+    },
+    {
+      "case_name": "mode-correlation-g102",
+      "family": "GutenTAG",
+      "generation_seed": 102,
+      "mechanism": "mode-correlation",
+      "test": "generation-102/mode-correlation/test.csv",
+      "test_sha256": "163770c5ff4c01f8a75a03415675657a624de4195001e24a020c8eb1cffa3ccf",
+      "train": "generation-102/mode-correlation/train_no_anomaly.csv",
+      "train_sha256": "26c29038af77b60486cb8a486c81ca0eba45553134928aecbb792051ac52d0c2"
+    },
+    {
+      "case_name": "amplitude-g102",
+      "family": "GutenTAG",
+      "generation_seed": 102,
+      "mechanism": "amplitude",
+      "test": "generation-102/amplitude/test.csv",
+      "test_sha256": "a3db639c10563c50a83edf4355a874ac6627d7c9378099487703aeab8a61f094",
+      "train": "generation-102/amplitude/train_no_anomaly.csv",
+      "train_sha256": "4d5241aa30ae9b85b329956ac7b477c63ed643d7534844eb4e2623a359d8a020"
+    },
+    {
+      "case_name": "mean-g102",
+      "family": "GutenTAG",
+      "generation_seed": 102,
+      "mechanism": "mean",
+      "test": "generation-102/mean/test.csv",
+      "test_sha256": "79e00ac11b47b83db452e37a99f2cf9d1e4b094cdfcf610009584f9107914b00",
+      "train": "generation-102/mean/train_no_anomaly.csv",
+      "train_sha256": "1ee7aed5ca4855fa9782009c90e62bc746c82620966da44ab9b13d1c5b7bc63d"
+    },
+    {
+      "case_name": "variance-g102",
+      "family": "GutenTAG",
+      "generation_seed": 102,
+      "mechanism": "variance",
+      "test": "generation-102/variance/test.csv",
+      "test_sha256": "7ec674dd521da4315e41034049e1af5f2e3cf99aafc05db6f074f4350a62377c",
+      "train": "generation-102/variance/train_no_anomaly.csv",
+      "train_sha256": "00d33ad4ea2b4b83cd296ada6d1fd8c8b7810243e51ddf7d29fb2a68093435f5"
+    },
+    {
+      "case_name": "frequency-g103",
+      "family": "GutenTAG",
+      "generation_seed": 103,
+      "mechanism": "frequency",
+      "test": "generation-103/frequency/test.csv",
+      "test_sha256": "9e0ecc35b68096f07ca281eca76ca05c0f13e39f3a3c0fc40de6eae90f1ae90e",
+      "train": "generation-103/frequency/train_no_anomaly.csv",
+      "train_sha256": "f6277c65ec4a6ecdbdb8f6da95df21e52f9d25bc01c62ff5234630c8ff5f7885"
+    },
+    {
+      "case_name": "pattern-shift-g103",
+      "family": "GutenTAG",
+      "generation_seed": 103,
+      "mechanism": "pattern-shift",
+      "test": "generation-103/pattern-shift/test.csv",
+      "test_sha256": "3c0b0b42fc5fb78a76316d79ad6af24becbf679611a24df87c75e0aae83d0d93",
+      "train": "generation-103/pattern-shift/train_no_anomaly.csv",
+      "train_sha256": "50cd249bf04baa55eb4c2936d685e33946d092c29b1db93a44448f662aab1bc6"
+    },
+    {
+      "case_name": "mode-correlation-g103",
+      "family": "GutenTAG",
+      "generation_seed": 103,
+      "mechanism": "mode-correlation",
+      "test": "generation-103/mode-correlation/test.csv",
+      "test_sha256": "6251689e9dc042e911fc5712fb5774dcf684727254b4d3f09d758b298312bd58",
+      "train": "generation-103/mode-correlation/train_no_anomaly.csv",
+      "train_sha256": "e80b6e17747bb3066f8bbde32be1801c319024f25b7d0794b141fb27f42b5131"
+    },
+    {
+      "case_name": "amplitude-g103",
+      "family": "GutenTAG",
+      "generation_seed": 103,
+      "mechanism": "amplitude",
+      "test": "generation-103/amplitude/test.csv",
+      "test_sha256": "b5f07b83c620e2d5d5e128aaa51cd1ce66dfbf063e3e86aeda027dd7ef100bcc",
+      "train": "generation-103/amplitude/train_no_anomaly.csv",
+      "train_sha256": "a86020bdffb5a77657053184281163a44fb03f98f1402d3ebf91f0c3e3871211"
+    },
+    {
+      "case_name": "mean-g103",
+      "family": "GutenTAG",
+      "generation_seed": 103,
+      "mechanism": "mean",
+      "test": "generation-103/mean/test.csv",
+      "test_sha256": "3688eae8f4f0dc2b1eaa41eea236023d19a073b368554dedcf77a58d9e23c81f",
+      "train": "generation-103/mean/train_no_anomaly.csv",
+      "train_sha256": "2ce6fd2ebb05133e64d51c228292520c96fd185406e3282066d8a77e2af157f9"
+    },
+    {
+      "case_name": "variance-g103",
+      "family": "GutenTAG",
+      "generation_seed": 103,
+      "mechanism": "variance",
+      "test": "generation-103/variance/test.csv",
+      "test_sha256": "fe69f33b42dff56b1851b6c32b602ad2f638a4adce1ea6775a52d9d05d7297d6",
+      "train": "generation-103/variance/train_no_anomaly.csv",
+      "train_sha256": "f05b886d10d36cfec1f8f02568751ad248704c43faf4a1676718057b43e38497"
+    }
+  ],
+  "config_sha256": "6eece4dd66c9ecb41321d44fe4083a98720e6162b4ec30d70fd147cdc179eb5b",
+  "generation_seeds": [
+    101,
+    102,
+    103
+  ],
+  "generator": "official TimeEval/GutenTAG",
+  "length": 8000,
+  "limitations": "One fixed severity and base family per mechanism; synthetic evidence only.",
+  "repository": "https://github.com/TimeEval/GutenTAG",
+  "version": "1.5.0"
+}
