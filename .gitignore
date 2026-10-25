@@ -68,6 +68,12 @@ data/pendulum_multiconcept_*.json
 # Local helper scripts not intended for the public artifact.
 scripts/
 
+# Private submission-history notes are maintained outside this repository.
+/post-ICDM-rev.md
+/ICDM_REVIEWS.md
+/DYNSPHERE_REVISION_RESULTS.md
+/STRATEGY_A_IMPLEMENTATION.md
+
 # Generated source checkouts and environments for official baseline evaluation.
 benchmarks/official_baselines/.external/
 benchmarks/official_baselines/.envs/

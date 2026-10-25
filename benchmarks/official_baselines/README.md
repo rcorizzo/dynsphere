@@ -1,7 +1,7 @@
 # Official Baselines and Expanded Evaluation
 
-This directory defines the source-traceable evaluation introduced after the
-original ICDM submission. Outputs written by earlier runners remain historical
+This directory defines the source-traceable evaluation for DynSphere.
+Outputs written by earlier runners remain historical
 audit artifacts. Only runs below `results/official_baselines_v1/` use the new
 private-label contract, training-only scaling, immutable source registry, and
 family-balanced aggregation protocol.

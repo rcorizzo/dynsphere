@@ -157,7 +157,6 @@
 - Modify: `benchmarks/official_baselines/HPC_EXECUTION.md`
 - Modify: `benchmarks/official_baselines/README.md`
 - Modify: `README.md`
-- Modify: `post-ICDM-rev.md`
 
 **Interfaces:**
 - Consumes: Tasks 1 through 5.
@@ -166,11 +165,11 @@
 - [ ] **Step 1: Document the final method table and run counts.** State 13 methods, seven dataset groups, three seeds, 63 cases per seed and method, and 2,457 logical runs.
 - [ ] **Step 2: Document AU submission.** Include setup verification, dry matrix validation, three component `bsub` commands, monitoring, selective rerun, and aggregation.
 - [ ] **Step 3: Document PLGrid submission.** Include environment variables, three method-filtered SLURM submissions, manifest paths, monitoring, selective rerun, synchronization, and aggregation.
-- [ ] **Step 4: Run the language-guardrail scan.** Search the four documentation files for the prohibited vocabulary and contrastive constructions and revise every occurrence introduced by this task.
+- [ ] **Step 4: Run the language-guardrail scan.** Search the three documentation files for the prohibited vocabulary and contrastive constructions and revise every occurrence introduced by this task.
 - [ ] **Step 5: Run the focused suite.** Execute `.venv/bin/python -m pytest tests/test_pendulum_components.py tests/test_official_baseline_local_controls.py tests/test_official_baseline_provenance.py tests/test_official_baseline_campaign.py tests/test_official_baseline_aggregation.py tests/test_official_baseline_hpc_scripts.py -q`; require all tests to pass.
 - [ ] **Step 6: Run the broader regression suite.** Execute `.venv/bin/python -m pytest tests/test_official_baseline_datasets.py tests/test_official_baseline_runner.py tests/test_strategy_a_real_world.py -q`; require all tests to pass.
 - [ ] **Step 7: Generate a dry campaign manifest in a temporary result root.** Require 2,457 jobs with method counts of 189 each and seed counts of 819 each. Delete only the temporary result root after validation.
-- [ ] **Step 8: Commit.** Stage the four documentation files and commit with `docs: add bundled multi-seed execution guide`.
+- [ ] **Step 8: Commit.** Stage the three documentation files and commit with `docs: add bundled multi-seed execution guide`.
 
 ## Execution Gate
 
