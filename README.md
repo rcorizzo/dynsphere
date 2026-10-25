@@ -64,8 +64,21 @@ python3.11 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -r requirements.txt pytest
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-  VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m pytest tests -q
+  VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m pytest \
+  tests/test_pendulum_components.py \
+  tests/test_official_baseline_local_controls.py \
+  tests/test_official_baseline_contract.py \
+  tests/test_exathlon_native.py \
+  tests/test_exathlon_native_metrics.py -q
 ```
+
+These self-contained checks run without downloading real datasets or upstream
+baseline repositories. The complete suite additionally includes integration
+checks requiring the 180-file TSB-AD-M selection and pinned CATCH/MTAD-GAT
+source checkouts. After acquiring those assets using the guides below, run
+`.venv/bin/python -m pytest tests -q`. The configured local environment passes
+288 tests, with one dedicated-environment check skipped. A missing external
+asset can cause an integration test to fail in a fresh clone.
 
 Install the optional official temporal metrics in a compatible environment:
 
