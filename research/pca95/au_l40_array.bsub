@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#BSUB -J "dynsphere-pca95-l40[1-16]%4"
+#BSUB -q long
+#BSUB -gpu "num=1:gmodel=NVIDIAL40"
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=32000]"
+#BSUB -W 48:00
+#BSUB -o logs/au-pca95-l40-%J-%I.out
+#BSUB -e logs/au-pca95-l40-%J-%I.err
+set -euo pipefail
+module load git/2.40.0
+: "${DYNSPHERE_PCA95_REPO:?Set the verified PCA-95 checkout}"
+exec bash "$DYNSPHERE_PCA95_REPO/research/pca95/run_group.sh" gpu

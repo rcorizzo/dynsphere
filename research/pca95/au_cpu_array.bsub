@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#BSUB -J "dynsphere-pca95-cpu[1-16]%4"
+#BSUB -q long
+#BSUB -n 2
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=16000]"
+#BSUB -W 48:00
+#BSUB -o logs/au-pca95-cpu-%J-%I.out
+#BSUB -e logs/au-pca95-cpu-%J-%I.err
+set -euo pipefail
+module load git/2.40.0
+: "${DYNSPHERE_PCA95_REPO:?Set the verified PCA-95 checkout}"
+exec bash "$DYNSPHERE_PCA95_REPO/research/pca95/run_group.sh" external_cpu
