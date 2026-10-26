@@ -41,6 +41,7 @@ VUS results require `vus==0.0.6`; buffered fallback values are diagnostic.
 | Corrected CPU baselines and aggregation | [Isolated recovery and matched aggregation](research/submission_recovery/README.md), preserving original attempts and documenting upstream normalization limitations. |
 | Exathlon/GHL/GutenTAG extension | [Extension preparation and evaluation](benchmarks/official_baselines/EXTENSION_EVALUATION.md). TSB-AD versions of Exathlon/GHL and independently generated GutenTAG examples have separately stated support. |
 | Source-native Exathlon | [Frozen execution-separated study](research/exathlon_native/README.md): four applications, five test executions, three seeds, ten configurations, 108 fits, and 150 score evaluations. Pointwise and segment-weighted VUS summaries use different, explicitly reported cohorts. |
+| Matched CPU quality and cost | [Five-family measurement protocol](research/quality_cost/README.md): nine methods, one metadata-selected case per primary family, three seeds, full sequences, and fresh one-thread workers. The new campaign is separate from the primary accuracy comparison. |
 | Research prototypes | [Window-conditioned pilot](research/window_dynsphere/README.md) and [conditional-dynamics implementation](manifold_dynamics_detector.py), evaluated separately from the current DynSphere configurations. |
 
 These studies are reported separately. Existing manifests, cached scores,
@@ -77,7 +78,7 @@ baseline repositories. The complete suite additionally includes integration
 checks requiring the 180-file TSB-AD-M selection and pinned CATCH/MTAD-GAT
 source checkouts. After acquiring those assets using the guides below, run
 `.venv/bin/python -m pytest tests -q`. The configured local environment passes
-288 tests, with one dedicated-environment check skipped. A missing external
+299 tests, with one dedicated-environment check skipped. A missing external
 asset can cause an integration test to fail in a fresh clone.
 
 Install the optional official temporal metrics in a compatible environment:
