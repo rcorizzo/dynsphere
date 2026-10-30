@@ -254,7 +254,7 @@ def main():
     p.add_argument('--stage',choices=['pilot','remaining']);p.add_argument('--index',type=int)
     a=p.parse_args();a.output=a.output.resolve();a.manifest=a.manifest.resolve()
     if a.prepare:
-        from research.explanation_handoff.runtime import validate_continuation
+        from .continuation import validate_continuation
         parent=json.loads(a.prepare.read_text());validate_continuation(parent)
         sources={str(path):original.digest(path) for path in Path(__file__).parent.glob('*.py')}
         sources[str(a.prepare.resolve())]=original.digest(a.prepare)

@@ -12,11 +12,14 @@ module load git/2.40.0
 : "${DYNSPHERE_AGGREGATION_REPO:?Set the unchanged CPU recovery checkout}"
 cd "$DYNSPHERE_AGGREGATION_REPO"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
-gpu_root=/home/rcorizzo/pendulum-l40-private-pilot-20261025/results/submission_gpu_l40_20261025
-cpu_root="$DYNSPHERE_AGGREGATION_REPO/results/submission_recovery_20261024"
+: "${DYNSPHERE_ORIGINAL_ROOT:?Set the original GPU run directory}"
+: "${DYNSPHERE_ORIGINAL_MANIFEST:?Set the original GPU manifest file}"
+: "${DYNSPHERE_RECOVERY_ROOT:?Set the corrected CPU run directory}"
+: "${DYNSPHERE_RECOVERY_MANIFEST:?Set the corrected CPU manifest file}"
+: "${DYNSPHERE_AGGREGATION_OUTPUT:?Set a new output directory}"
 exec .venv/bin/python -u -m research.submission_recovery.aggregate \
-  --original-root "$gpu_root/deep/16b7c6842a95" \
-  --original-manifest "$gpu_root/deep-manifests/16b7c6842a9595a8cf610b019fecc25dc9555ff2d47191cc6832eb39c114b3ef.json" \
-  --recovery-root "$cpu_root/campaigns/9cc3939f65b4" \
-  --recovery-manifest "$cpu_root/manifests/9cc3939f65b4fadad6b6675535b04bd34682a1ec6dc6c37827e5a2f86998bd80.json" \
-  --output "$DYNSPHERE_AGGREGATION_REPO/results/heldout_l40_cpu_comparison_20261025"
+  --original-root "$DYNSPHERE_ORIGINAL_ROOT" \
+  --original-manifest "$DYNSPHERE_ORIGINAL_MANIFEST" \
+  --recovery-root "$DYNSPHERE_RECOVERY_ROOT" \
+  --recovery-manifest "$DYNSPHERE_RECOVERY_MANIFEST" \
+  --output "$DYNSPHERE_AGGREGATION_OUTPUT"

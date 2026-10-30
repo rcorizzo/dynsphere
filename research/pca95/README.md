@@ -33,7 +33,7 @@ original PCA reconstruction baseline already selects 95% variance and is
 not duplicated. Its existing dimension rule has no five-component minimum.
 
 Upstream implementation limitations remain, including OmniAnomaly's separate
-partition normalization. DAGMM uses the existing private compatibility overlay
+partition normalization. DAGMM uses a method-specific dependency overlay
 under `dependencies/dagmm-overlay`; its runtime must be prepared separately
 using the existing recovery instructions. No baseline repair occurs here.
 
@@ -131,5 +131,3 @@ means are suppressed until all 59 primary cases and all three seeds are
 available for that variant. Every failure, timeout and missing execution is
 retained in the completion report. Source-specific switching and selecting
 the best configuration from test results are outside this protocol.
-
-No manuscript or GitHub publication is performed by these runners.

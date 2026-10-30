@@ -60,5 +60,4 @@ because their membership can differ between methods.
 The shuffled-attribution stability value shares its permutation between
 original/noisy inputs, so rank correlation is preserved. It is not an
 independent stability control. Stability is interpreted jointly with
-faithfulness and localization. Findings remain internal until publication
-is explicitly authorized.
+faithfulness and localization.

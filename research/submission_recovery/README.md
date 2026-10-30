@@ -1,69 +1,63 @@
-# Isolated CPU recovery, October 24, 2026
+# Corrected DAGMM and OmniAnomaly CPU evaluation
 
-This campaign preserves all original results and leaves arrays 44785 and
-44786 unchanged. It runs from a separate checkout and writes a new result
-identity. Shared environments, upstream checkouts, adapters, and the detector
-remain unchanged. No paper table is updated automatically.
+This runner evaluates the CPU deep baselines on the
+[held-out comparison](../submission_campaign/HPC_RUN_GUIDE.md). Architecture,
+training budgets, windows, and test boundaries remain fixed.
 
-## Corrections
+## Environment and validation
 
-1. DAGMM's worker imports pandas through the frozen campaign helpers. Its
-   environment lacks pandas and pytz. Install pandas 1.5.3 and pytz 2024.1 as
-   binary wheels in `dependencies/dagmm-overlay`, used only by new workers.
-   NumPy, TensorFlow, SciPy, and scikit-learn retain their original versions.
-   Runtime evidence includes package versions, import origins, and content
-   hashes. No shared environment installation is performed.
-2. TSB-AD OmniAnomaly internally reserves 20% of its fitting input for
-   validation. Applying this split to an already shortened fitting prefix
-   leaves some MSL validation partitions below its fixed 100-observation
-   window. The corrected runner passes the original fitting observations
-   followed by the reserved normal-calibration observations. Its internal
-   split recovers the exact original fitting boundary. Validation receives
-   no test observations or test labels. Architecture, loss, learning rate,
-   window, and epoch budget are unchanged.
+DAGMM requires its pinned TensorFlow environment plus pandas 1.5.3 and
+pytz 2024.1. Install these packages as binary wheels in the separate
+`dependencies/dagmm-overlay` directory. The runner records package
+versions, import locations, and overlay file hashes; it does not modify a
+shared environment.
 
-OmniAnomaly's upstream `ReconstructDataset` normalizes fitting, validation,
-and test partitions separately. That behavior is unchanged and constitutes
-a transductive feature-normalization caveat. The correction does not establish
-strictly training-only internal normalization for that baseline.
+For TSB-AD OmniAnomaly, the adapter supplies the fitting rows followed by
+reserved normal-calibration rows. Its internal 80/20 validation split then
+recovers the declared fitting boundary. No test data enter validation.
+The upstream dataset class independently normalizes fitting, validation,
+and test partitions. This transductive preprocessing behavior is retained
+and must be identified in comparisons.
 
-Both corrected methods receive a new identity and rerun all cases and seeds.
-The previous OmniAnomaly successes remain in the original campaign. They
-are excluded from the corrected comparison to keep one validation policy.
+## Execution
 
-## Launch
+Prepare compatible method environments using the
+[baseline guide](../../benchmarks/official_baselines/README.md). Restore the
+protocol manifest and bound input sources before using the frozen runner.
 
-Use the isolated recovery checkout, load `git/2.40.0`, and set
-`DYNSPHERE_RECOVERY_REPO` to that checkout. Create its `logs` directory.
-Submit `au_setup.bsub`, verify successful private imports, then submit
-`au_pilot.bsub`. The pilot runs the first MSL case at seed 37 for both methods.
-Verify two complete, independently validated results before submitting
-`au_cpu.bsub`. The array has 16 shards, a concurrency limit of four, and
-366 planned records: 360 eligible executions and six declared incompatible
-records. It reuses the two successful pilot records after validation.
+```bash
+export DYNSPHERE_RECOVERY_REPO="$PWD"
+mkdir -p logs
+.venv/bin/python -m research.submission_recovery.run --help
+```
 
-Retries create a new numbered attempt directory, preserving old attempts.
-Do not run overlapping recovery arrays concurrently. Source changes generate
-a different manifest. Existing source and result directories are preserved.
+LSF templates `au_setup.bsub`, `au_pilot.bsub`, and `au_cpu.bsub`
+provide environment setup, a first-case technical check, and the CPU array.
+Configure their queue, module and resource settings for the execution host.
+Verify setup and pilot evidence before launching the full array. Each
+attempt retains its terminal record; do not overlap arrays assigned to
+the same trials.
 
-## Explicit aggregation
+## Matched aggregation
 
-The new `aggregate` module requires original and recovery roots and frozen
-manifests. It chooses the original four GPU methods and the corrected two
-CPU methods explicitly. It rejects changed configurations, upstream sources,
-inputs, score hashes, and duplicate method/case/seed entries. It recomputes
-the seven local controls on the same 100-observation boundary exclusions.
-Partial and all-method matched-support summaries remain separate. The output
-directory must be new; aggregation never overwrites an earlier summary.
+The aggregator requires explicit original and corrected result directories
+and their manifests:
 
 ```bash
 .venv/bin/python -m research.submission_recovery.aggregate \
-  --original-root /absolute/original/results/deep/ORIGINAL_PREFIX \
-  --original-manifest /absolute/original/results/deep-manifests/ORIGINAL_ID.json \
-  --recovery-root /absolute/recovery/results/campaigns/RECOVERY_PREFIX \
-  --recovery-manifest /absolute/recovery/results/manifests/RECOVERY_ID.json \
-  --output /absolute/new/summary-directory
+  --original-root /path/to/original/runs \
+  --original-manifest /path/to/original/manifest.json \
+  --recovery-root /path/to/corrected/runs \
+  --recovery-manifest /path/to/corrected/manifest.json \
+  --output /path/to/new/summary
 ```
 
-These summaries include AUPRC, AUROC, and standardized partial AUROC at
-FPR <= 5%. They do not claim a new VUS evaluation or submission readiness.
+It validates source/configuration/input/score identities and reports
+pointwise quality on common successful case/seed support. Earlier attempts
+remain separate. Select an unused output directory.
+
+For `au_l40_cpu_aggregate.bsub`, set
+`DYNSPHERE_AGGREGATION_REPO`, `DYNSPHERE_ORIGINAL_ROOT`,
+`DYNSPHERE_ORIGINAL_MANIFEST`, `DYNSPHERE_RECOVERY_ROOT`,
+`DYNSPHERE_RECOVERY_MANIFEST`, and `DYNSPHERE_AGGREGATION_OUTPUT`
+to the corresponding paths on the execution host before submission.

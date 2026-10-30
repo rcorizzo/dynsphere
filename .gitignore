@@ -78,3 +78,13 @@ scripts/
 benchmarks/official_baselines/.external/
 benchmarks/official_baselines/.envs/
 benchmarks/official_baselines/.work/
+
+# Local planning, notes, and generated development workspaces.
+docs/superpowers/
+.superpowers/
+dependencies/
+private_repository_notes/
+research/explanation_handoff/
+benchmarks/official_baselines/*_PROGRESS_*.md
+benchmarks/official_baselines/*_RESULTS_*.md
+benchmarks/official_baselines/*_LEDGER_*.md

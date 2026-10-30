@@ -5,8 +5,9 @@
 This extension preserves the earlier campaigns. UCR is excluded. The first
 stage uses the 25 Exathlon and 23 GHL files in the fixed TSB-AD-M evaluation
 manifest. Additional local files outside that manifest are excluded by the
-selection rule. These are TSB-AD versions; source-native Exathlon/GHL
-validation remains a separate subsequent stage.
+selection rule. These are TSB-AD versions; the separate
+[source-native Exathlon guide](../../research/exathlon_native/README.md)
+describes execution-separated Exathlon evaluation.
 
 Training uses the filename-declared prefix. Only the held-out suffix is
 passed to scoring and evaluation. Contaminated prefixes and nonfinite
@@ -28,8 +29,8 @@ checks before reuse, including preprocessing, boundary context, and alignment.
 The initial pilot uses pointwise AP, AUROC, and partial AUROC. It records
 prevalence and cached scores. `--with-vus` additionally requires the official
 VUS backend and can be considerably slower. The pilot's readiness flag stays
-false, including when VUS is enabled; independent scientific review and the
-expanded baseline comparison remain necessary before manuscript use.
+false, including when VUS is enabled; the pilot does not provide complete
+multi-method, multiseed benchmark coverage.
 
 ## Local pilot
 
@@ -136,8 +137,8 @@ manifest containing `cases`, with fields `family`, `case_name`, `train`, and
 `test`. Paths are relative to the manifest. Use separate, verified normal
 training files and preserve original application/trace identities. The loader
 excludes timestamps from model features and requires identical feature order.
-Obtaining and auditing these source-native releases is subsequent work;
-the current pilot must not be described as evaluating their complete releases.
+Evaluate source-native releases under their declared execution boundaries;
+this extension's TSB-AD preparation does not evaluate their complete releases.
 
 Sources: [Exathlon](https://github.com/exathlonbenchmark/exathlon),
 [TimeEval datasets](https://timeeval.github.io/evaluation-paper/notebooks/Datasets.html),

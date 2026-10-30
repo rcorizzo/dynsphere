@@ -113,12 +113,3 @@ The pilot is exploratory. These source families already informed model
 development. Additional detector seeds on the same cases do not supply an
 independent confirmation dataset. A larger campaign requires an explicit
 decision after reviewing all pilot outcomes.
-
-## Completed pilot
-
-The bounded pilot completed with 112 successful executions and eight
-PowerSystem incompatibilities. All 14 eligible cases completed all eight
-configurations. The source/input/artifact audit passed. Results do not
-establish a consistent improvement for the proposed local-regime variant.
-See `PILOT_RESULTS_20261023.md` for the complete comparison and limitations.
-No larger campaign was launched.
