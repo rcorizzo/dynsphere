@@ -80,6 +80,8 @@ requires its original manifest and input bundle.
 
 ## Experiments
 
+The supplementary evaluations are available as a [PDF](docs/dynsphere_supplement.pdf).
+
 Run commands from the repository root. The guides specify input preparation,
 environment requirements, execution, and aggregation.
 
